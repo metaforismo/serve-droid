@@ -65,7 +65,7 @@
     "@types/node": "^24.10.1",
     "@yume-chan/fetch-scrcpy-server": "^1.0.0",
     "eslint": "^9.39.2",
-    "esbuild": "^0.27.3",
+    "esbuild": "^0.28.1",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
