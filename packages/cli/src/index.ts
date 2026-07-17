@@ -19,6 +19,8 @@ import {
 } from "@serve-droid/core";
 import {
   NamedCloudflareTunnel,
+  GridCoordinator,
+  GridDashboard,
   readSessionStates,
   recoverPartialRecordings,
   removeRecording,
@@ -362,6 +364,67 @@ tunnel
       `Remote access active until ${status.expiresAt}\nOpen: ${status.publicUrl}/#token=${session.token}\nCtrl-C revokes the connector immediately.`,
     );
     await new Promise<void>((resolvePromise) => manager.once("close", () => resolvePromise()));
+  });
+
+program
+  .command("grid [devices...]")
+  .description("Start a bounded local cockpit grid for multiple connected devices.")
+  .option(
+    "--max-devices <count>",
+    "hard concurrent-device limit",
+    (value) => Number.parseInt(value, 10),
+    4,
+  )
+  .option("--port <port>", "grid dashboard port", (value) => Number.parseInt(value, 10), 0)
+  .action(async (selectors: string[], local, command) => {
+    const options = globalOptions(command);
+    const adb = await client();
+    const connected = await listDevices(adb);
+    const devices = selectors.length
+      ? selectors.map((selector) => selectDevice(connected, selector))
+      : connected.filter((device) => device.state === "device");
+    let gridUrl = "";
+    const coordinator = new GridCoordinator(devices, local.maxDevices, async (device) => {
+      const server = new ServeDroidServer(await AndroidService.connect(adb, device.serial), {
+        frameAncestor: gridUrl,
+      });
+      const session = await server.start();
+      return {
+        session,
+        healthy: async () => {
+          try {
+            const response = await fetch(`${session.url}/api/v1/health`, {
+              signal: AbortSignal.timeout(750),
+            });
+            if (!response.ok) return false;
+            const value = (await response.json()) as { schemaVersion?: number; status?: string };
+            return value.schemaVersion === SCHEMA_VERSION && value.status === "ok";
+          } catch {
+            return false;
+          }
+        },
+        stop: () => server.stop(),
+      };
+    });
+    let dashboard: GridDashboard | undefined;
+    try {
+      dashboard = new GridDashboard(coordinator, local.port);
+      gridUrl = await dashboard.start();
+      const snapshot = await coordinator.start();
+      output(
+        { url: gridUrl, ...snapshot },
+        options,
+        `serve-droid grid: ${gridUrl}\nActive devices: ${snapshot.sessions.length}\nPartial failures: ${snapshot.failures.length}`,
+      );
+      const stop = () =>
+        void Promise.all([dashboard!.stop(), coordinator.stop()]).finally(() => process.exit());
+      process.on("SIGINT", stop);
+      process.on("SIGTERM", stop);
+    } catch (error) {
+      await dashboard?.stop().catch(() => undefined);
+      await coordinator.stop();
+      throw error;
+    }
   });
 
 program.action(async () => {

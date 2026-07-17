@@ -23,6 +23,7 @@ import type { TunnelStatus } from "./tunnel.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
+const DEFAULT_VIDEO_CLIENT_LIMIT = 2;
 
 export interface ServerOptions {
   host?: string;
@@ -32,6 +33,8 @@ export interface ServerOptions {
   videoSource?: VideoSource;
   recording?: Omit<RecordingOptions, "serial">;
   audio?: boolean;
+  frameAncestor?: string;
+  maxVideoClients?: number;
 }
 
 export function encodeAudioPacket(data: Buffer, pts: bigint): Buffer {
@@ -92,6 +95,18 @@ function defaultWebRoot(): string {
   );
 }
 
+function loopbackFrameAncestor(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const origin = new URL(value);
+  if (origin.protocol !== "http:" || origin.hostname !== "127.0.0.1" || origin.origin !== value) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A frame ancestor must be an exact http://127.0.0.1 origin.",
+    );
+  }
+  return origin.origin;
+}
+
 async function readBody(request: IncomingMessage, limit = JSON_LIMIT): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -123,6 +138,8 @@ export class ServeDroidServer {
   readonly #host: string;
   readonly #requestedPort: number;
   readonly #webRoot: string;
+  readonly #frameAncestor: string | undefined;
+  readonly #maxVideoClients: number;
   readonly #recordingOptions: Omit<RecordingOptions, "serial"> | undefined;
   #recorder: SessionRecorder | undefined;
   #session: SessionInfo | undefined;
@@ -143,6 +160,15 @@ export class ServeDroidServer {
     this.#requestedPort = options.port ?? 0;
     this.#token = options.token ?? randomBytes(32).toString("base64url");
     this.#webRoot = options.webRoot ?? defaultWebRoot();
+    this.#frameAncestor = loopbackFrameAncestor(options.frameAncestor);
+    this.#maxVideoClients = options.maxVideoClients ?? DEFAULT_VIDEO_CLIENT_LIMIT;
+    if (
+      !Number.isInteger(this.#maxVideoClients) ||
+      this.#maxVideoClients < 1 ||
+      this.#maxVideoClients > 8
+    ) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "maxVideoClients must be between 1 and 8.");
+    }
     this.#recordingOptions = options.recording;
     this.#http = createServer((request, response) => void this.#handle(request, response));
     this.#videoWebSocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
@@ -298,10 +324,10 @@ export class ServeDroidServer {
 
   async #handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     response.setHeader("referrer-policy", "no-referrer");
-    response.setHeader("x-frame-options", "DENY");
+    if (!this.#frameAncestor) response.setHeader("x-frame-options", "DENY");
     response.setHeader(
       "content-security-policy",
-      "default-src 'self'; connect-src 'self' ws:; img-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+      `default-src 'self'; connect-src 'self' ws:; img-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; frame-ancestors ${this.#frameAncestor ?? "'none'"}`,
     );
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
     try {
@@ -584,6 +610,11 @@ export class ServeDroidServer {
           : url.pathname === "/api/v1/control"
             ? this.#controlWebSocket
             : null;
+    if (server === this.#videoWebSocket && server.clients.size >= this.#maxVideoClients) {
+      socket.write("HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return;
+    }
     if (!server) {
       socket.destroy();
       return;

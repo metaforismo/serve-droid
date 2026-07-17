@@ -57,6 +57,14 @@ Installed emulators can be managed explicitly with `serve-droid avd start <name>
 `serve-droid avd stop <serial>`. No SDK content is downloaded or licensed automatically; see the
 [AVD lifecycle guide](docs/avd.md).
 
+To inspect several connected devices with independent tokens and bounded resources:
+
+```bash
+npx serve-droid grid --max-devices 4
+```
+
+See the [multi-device grid security and isolation model](docs/grid.md).
+
 Coordinates are normalized: `(0, 0)` is the logical top-left and `(1, 1)` is the bottom-right.
 
 ```bash
