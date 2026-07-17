@@ -29,6 +29,14 @@ Firefox, and 331.0 ms in WebKit (Playwright 1.61.1). These are functional startu
 not steady-state device-stream latency or browser CPU measurements, and they must not be used to
 claim parity with WebCodecs.
 
+The same Apple M3 host then ran a 640x360, 30 FPS, three-second generated stream through stable
+Chrome 150.0.7871.116. WebCodecs rendered 90 frames in 540.9 ms using 0.417 browser-process CPU
+seconds. Forced TinyH264 rendered 85 frames in 633.5 ms using 0.759 CPU seconds. In this bounded
+sample, the fallback used 1.82x the measured process CPU and took 1.17x the elapsed time. The test
+uses Chrome DevTools process counters before and after each decoder run in the same browser process;
+run it with `SERVE_DROID_STABLE_CHROME=1 pnpm test:browser --project stable-chrome`. These numbers
+are comparative browser-decoder evidence, not a real-device network or end-to-end latency claim.
+
 Run browser acceptance against the same device, motion script, viewport, and 30-second sample. Log
 the decoder label shown in the header, rendered frames, p50/p95 frame arrival-to-render latency,
 and browser-process CPU. Compare Safari and Firefox independently against the Chrome WebCodecs run;
@@ -36,4 +44,5 @@ do not combine host machines or device traces. Results belong in the release evi
 browser versions, host hardware, Android device/API, and whether WebGL was available.
 
 The software path is a compatibility fallback, not a promise of Chromium-equivalent performance.
-The release checklist keeps real-browser performance numbers separate from functional support.
+The release checklist keeps real-device performance numbers separate from functional browser
+support.

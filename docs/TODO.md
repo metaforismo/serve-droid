@@ -92,7 +92,7 @@ because its code path compiles.
 - [x] Keyboard focus, ARIA labels, visible focus, reduced motion, and live status.
 - [x] Prefer WebCodecs and lazily fall back to Tango TinyH264 in Safari and Firefox.
 - [x] Keep authenticated control and semantic inspection independent from video decoding.
-- [ ] Record real-browser fallback latency and CPU evidence against the Chromium path.
+- [x] Record same-stream stable-Chrome fallback latency and process-CPU evidence against WebCodecs.
 - [x] Keep bearer tokens out of query strings, server logs, and non-loopback HTML.
 - [ ] Add a LAN token-entry screen and document fragment-based handoff.
 - [ ] Add package, priority, and tag Logcat filters plus pause/clear/copy controls.

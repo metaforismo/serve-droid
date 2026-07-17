@@ -21,5 +21,8 @@ export default defineConfig({
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    ...(process.env.SERVE_DROID_STABLE_CHROME
+      ? [{ name: "stable-chrome", use: { ...devices["Desktop Chrome"], channel: "chrome" } }]
+      : []),
   ],
 });
