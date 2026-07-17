@@ -17,9 +17,10 @@ because its code path compiles.
 - [x] Vendor scrcpy-server 3.3.3 and verify its recorded SHA-256 in tests.
 - [x] Pack the npm artifact and install it in an isolated directory.
 - [x] Run the installed executable and validate versioned `doctor --json` output.
-- [ ] Re-authenticate GitHub CLI as `metaforismo`.
-- [ ] Create the public `metaforismo/serve-droid` repository after CI is green.
-- [ ] Enable branch protection, secret scanning, and required checks in GitHub settings.
+- [x] Verify GitHub access as `metaforismo` and publish through protected pull requests.
+- [x] Create the public `metaforismo/serve-droid` repository after CI is green.
+- [x] Enable branch protection, secret scanning, push protection, and required checks.
+- [x] Add a reproducible README cockpit screenshot that is explicitly labeled as demo data.
 - [ ] Re-authenticate npm with publishing rights.
 - [ ] Publish a release candidate with npm provenance.
 - [ ] Install the release candidate from the public registry on clean macOS, Linux, and Windows.

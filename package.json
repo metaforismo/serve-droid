@@ -46,6 +46,7 @@
     "build": "pnpm -r build && node scripts/build-bundle.mjs",
     "clean": "pnpm -r clean",
     "dev": "pnpm --filter @serve-droid/cli dev",
+    "demo": "node scripts/demo-server.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",

@@ -3,6 +3,7 @@ import {
   action,
   api,
   authenticatedWebSocket,
+  screenshot,
   upload,
   type LogEntry,
   type Observation,
@@ -11,6 +12,7 @@ import {
 import { H264CanvasPlayer } from "./video.js";
 
 type Panel = "logs" | "tree";
+const demoMode = new URLSearchParams(location.search).has("demo");
 
 function label(element: UiElement): string {
   return element.text || element.contentDescription || element.resourceId || element.className;
@@ -26,6 +28,7 @@ export function App() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [frames, setFrames] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -35,7 +38,7 @@ export function App() {
       );
       setObservation(result);
       setLogs((previous) => [...previous, ...result.logs].slice(-1000));
-      setStatus("Connected");
+      setStatus(demoMode ? "Demo preview" : "Connected");
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -44,12 +47,37 @@ export function App() {
   }, [observation?.nextLogCursor]);
 
   useEffect(() => {
+    if (!observation || frames > 0) return;
+    let cancelled = false;
+    void screenshot(observation.screenshot.url)
+      .then((blob) => {
+        if (cancelled) return;
+        const nextUrl = URL.createObjectURL(blob);
+        setPreviewUrl(nextUrl);
+      })
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : String(reason)),
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [frames, observation]);
+
+  useEffect(
+    () => () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    },
+    [previewUrl],
+  );
+
+  useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
   useEffect(() => {
+    if (demoMode) return;
     if (!canvas.current) return;
     let player: H264CanvasPlayer;
     try {
@@ -134,6 +162,7 @@ export function App() {
             <i />
             {status}
           </span>
+          {demoMode && <span className="demo-badge">Demo data</span>}
           <span>
             {observation?.device.model ?? observation?.device.serial ?? "Waiting for device"}
           </span>
@@ -189,6 +218,9 @@ export function App() {
           <div
             className={`phone ${observation?.display.orientation !== "portrait" ? "landscape" : ""}`}
           >
+            {previewUrl && frames === 0 && (
+              <img src={previewUrl} alt="Current Android device screenshot" />
+            )}
             <canvas
               ref={canvas}
               aria-label="Live Android device. Click to tap."

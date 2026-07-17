@@ -7,6 +7,11 @@ session to an MCP-compatible coding agent.
 > Status: v0.1 development release. The public API is versioned, but video transport and device
 > compatibility still need validation on the published support matrix.
 
+![serve-droid browser cockpit showing a demo Android fixture, scoped Logcat, and device controls](docs/assets/serve-droid-cockpit.jpg)
+
+_Browser cockpit with deterministic demo data. This image is not presented as real-device
+validation; hardware evidence is tracked separately in the release checklist._
+
 ## Why
 
 Android Studio mirrors devices, scrcpy provides excellent native display/control, and Maestro is a
@@ -92,6 +97,17 @@ The Android fixture source is under `fixtures/android-test-app`. Real-device tes
 
 See the evidence-based [release checklist](docs/TODO.md) for completed work and the remaining
 hardware, platform, and publication gates.
+
+## Project TODO
+
+- [x] Publish the open repository with protected `main`, CodeQL, Dependabot, and secret scanning.
+- [x] Ship the shared CLI, HTTP/WebSocket, MCP, Agent Skill, and browser cockpit foundation.
+- [x] Add a reproducible, clearly labeled cockpit screenshot to this README.
+- [ ] Complete the real-device acceptance matrix on macOS, Linux, and Windows.
+- [ ] Publish and validate the npm release candidate before tagging v0.1.0.
+
+The complete, evidence-based checklist lives in [docs/TODO.md](docs/TODO.md). Items stay unchecked
+until the repository contains the implementation or the required external evidence.
 
 ## License
 
