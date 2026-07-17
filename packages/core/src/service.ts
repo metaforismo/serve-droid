@@ -8,13 +8,63 @@ import type { DeviceSummary, ForegroundApp, LogEntry, Observation, UiElement } f
 import { SCHEMA_VERSION } from "./types.js";
 
 export function parseForeground(output: string): Omit<ForegroundApp, "pid"> {
-  const component = output.match(
-    /(?:mResumedActivity|topResumedActivity)[^\n]*?\s([a-zA-Z0-9_.]+)\/([a-zA-Z0-9_.$]+)/u,
-  );
+  const component = findForegroundComponent(output);
   return {
-    packageName: component?.[1] ?? null,
-    activity: component?.[2] ?? null,
+    packageName: component?.packageName ?? null,
+    activity: component?.activity ?? null,
   };
+}
+
+function findForegroundComponent(output: string): { packageName: string; activity: string } | null {
+  const resumedMarker = "mResumedActivity";
+  const topMarker = "topResumedActivity";
+  let resumedPosition = output.indexOf(resumedMarker);
+  let topPosition = output.indexOf(topMarker);
+  while (resumedPosition >= 0 || topPosition >= 0) {
+    const useResumed = resumedPosition >= 0 && (topPosition < 0 || resumedPosition < topPosition);
+    const marker = useResumed ? resumedMarker : topMarker;
+    const markerIndex = useResumed ? resumedPosition : topPosition;
+    const lineEnd = output.indexOf("\n", markerIndex);
+    const end = Math.min(lineEnd < 0 ? output.length : lineEnd, markerIndex + 4096);
+    const component = scanComponent(output.slice(markerIndex + marker.length, end));
+    if (component) return component;
+    if (useResumed)
+      resumedPosition = output.indexOf(resumedMarker, markerIndex + resumedMarker.length);
+    else topPosition = output.indexOf(topMarker, markerIndex + topMarker.length);
+  }
+  return null;
+}
+
+function isComponentCharacter(value: string, allowDollar: boolean): boolean {
+  const code = value.charCodeAt(0);
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    value === "_" ||
+    value === "." ||
+    (allowDollar && value === "$")
+  );
+}
+
+function scanComponent(value: string): { packageName: string; activity: string } | null {
+  let slash = value.indexOf("/");
+  while (slash >= 0) {
+    let packageStart = slash;
+    while (packageStart > 0 && isComponentCharacter(value[packageStart - 1]!, false))
+      packageStart -= 1;
+    let activityEnd = slash + 1;
+    while (activityEnd < value.length && isComponentCharacter(value[activityEnd]!, true))
+      activityEnd += 1;
+    if (packageStart < slash && activityEnd > slash + 1) {
+      return {
+        packageName: value.slice(packageStart, slash),
+        activity: value.slice(slash + 1, activityEnd),
+      };
+    }
+    slash = value.indexOf("/", slash + 1);
+  }
+  return null;
 }
 
 export class AndroidService {

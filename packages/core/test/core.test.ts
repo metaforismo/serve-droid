@@ -115,6 +115,9 @@ describe("logs and foreground state", () => {
       tag: "Fixture",
       message: "Boom",
     });
+    expect(
+      parseLogLine(`07-17 12:34:56.789  1234  1250 A ${"  ".repeat(40_000)}`, 8, 2026),
+    ).toBeNull();
   });
 
   it("parses the resumed Android activity", () => {
@@ -123,6 +126,15 @@ describe("logs and foreground state", () => {
         "mResumedActivity: ActivityRecord{abc u0 dev.servedroid.fixture/.MainActivity t12}",
       ),
     ).toEqual({ packageName: "dev.servedroid.fixture", activity: ".MainActivity" });
+    expect(
+      parseForeground(
+        "topResumedActivity=ActivityRecord{def u0 dev.servedroid.fixture/.SecondActivity t13}",
+      ),
+    ).toEqual({ packageName: "dev.servedroid.fixture", activity: ".SecondActivity" });
+    expect(parseForeground("mResumedActivity".repeat(20_000))).toEqual({
+      packageName: null,
+      activity: null,
+    });
   });
 });
 
