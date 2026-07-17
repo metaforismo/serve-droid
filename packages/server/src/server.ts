@@ -16,7 +16,7 @@ import {
   type Gesture,
   type SessionInfo,
 } from "@serve-droid/core";
-import { ScrcpyH264Source, type VideoSource } from "./video.js";
+import { ScrcpyH264Source, type AudioState, type VideoSource } from "./video.js";
 import { removeSessionState, writeSessionState } from "./state.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 
@@ -30,6 +30,18 @@ export interface ServerOptions {
   webRoot?: string;
   videoSource?: VideoSource;
   recording?: Omit<RecordingOptions, "serial">;
+  audio?: boolean;
+}
+
+export function encodeAudioPacket(data: Buffer, pts: bigint): Buffer {
+  const packet = Buffer.allocUnsafe(8 + data.length);
+  packet.writeBigInt64BE(pts, 0);
+  data.copy(packet, 8);
+  return packet;
+}
+
+export function canSendAudio(bufferedAmount: number): boolean {
+  return Number.isFinite(bufferedAmount) && bufferedAmount >= 0 && bufferedAmount < 512 * 1024;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -103,6 +115,7 @@ async function readJson(request: IncomingMessage): Promise<Record<string, unknow
 export class ServeDroidServer {
   readonly #http;
   readonly #videoWebSocket: WebSocketServer;
+  readonly #audioWebSocket: WebSocketServer;
   readonly #controlWebSocket: WebSocketServer;
   readonly #video: VideoSource;
   readonly #token: string;
@@ -112,6 +125,7 @@ export class ServeDroidServer {
   readonly #recordingOptions: Omit<RecordingOptions, "serial"> | undefined;
   #recorder: SessionRecorder | undefined;
   #session: SessionInfo | undefined;
+  #audioState: AudioState;
   #stopping = false;
 
   public constructor(
@@ -125,8 +139,23 @@ export class ServeDroidServer {
     this.#recordingOptions = options.recording;
     this.#http = createServer((request, response) => void this.#handle(request, response));
     this.#videoWebSocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+    this.#audioWebSocket = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
     this.#controlWebSocket = new WebSocketServer({ noServer: true, maxPayload: JSON_LIMIT });
-    this.#video = options.videoSource ?? new ScrcpyH264Source(service.device.serial);
+    const audioRequested = Boolean(options.audio);
+    const audioSupported = (service.device.apiLevel ?? 0) >= 30;
+    this.#audioState = {
+      enabled: audioRequested,
+      available: false,
+      codec: null,
+      reason: !audioRequested
+        ? "Audio capture was not enabled for this session."
+        : !audioSupported
+          ? "Android audio playback capture requires API 30 or newer."
+          : "Negotiating device audio.",
+    };
+    this.#video =
+      options.videoSource ??
+      new ScrcpyH264Source(service.device.serial, audioRequested && audioSupported);
     this.#video.on("data", (chunk) => {
       this.#recorder?.recordVideo(chunk);
       for (const client of this.#videoWebSocket.clients) {
@@ -141,6 +170,24 @@ export class ServeDroidServer {
       }
     });
     this.#video.on("size", (size) => this.#recorder?.recordEvent("display-size", size));
+    this.#video.on("audioState", (state) => {
+      this.#audioState = state;
+      const message = JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        type: "audio-state",
+        ...state,
+      });
+      for (const client of this.#audioWebSocket.clients) {
+        if (client.readyState === WebSocket.OPEN) client.send(message);
+      }
+    });
+    this.#video.on("audioData", ({ data, pts }) => {
+      const packet = encodeAudioPacket(data, pts);
+      for (const client of this.#audioWebSocket.clients) {
+        if (client.readyState === WebSocket.OPEN && canSendAudio(client.bufferedAmount))
+          client.send(packet);
+      }
+    });
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#controlWebSocket.on("connection", (socket) => {
       socket.on("message", (message) => {
@@ -149,6 +196,11 @@ export class ServeDroidServer {
           : Buffer.from(message as ArrayBuffer).toString("utf8");
         void this.#handleControl(socket, value);
       });
+    });
+    this.#audioWebSocket.on("connection", (socket) => {
+      socket.send(
+        JSON.stringify({ schemaVersion: SCHEMA_VERSION, type: "audio-state", ...this.#audioState }),
+      );
     });
   }
 
@@ -215,7 +267,11 @@ export class ServeDroidServer {
     this.#recorder?.recordEvent("session-stop");
     await this.#recorder?.stop();
     this.service.stop();
-    for (const client of [...this.#videoWebSocket.clients, ...this.#controlWebSocket.clients])
+    for (const client of [
+      ...this.#videoWebSocket.clients,
+      ...this.#audioWebSocket.clients,
+      ...this.#controlWebSocket.clients,
+    ])
       client.close(1001);
     await new Promise<void>((resolvePromise) => this.#http.close(() => resolvePromise()));
     await removeSessionState(this.service.device.serial);
@@ -472,9 +528,11 @@ export class ServeDroidServer {
     const server =
       url.pathname === "/api/v1/video"
         ? this.#videoWebSocket
-        : url.pathname === "/api/v1/control"
-          ? this.#controlWebSocket
-          : null;
+        : url.pathname === "/api/v1/audio"
+          ? this.#audioWebSocket
+          : url.pathname === "/api/v1/control"
+            ? this.#controlWebSocket
+            : null;
     if (!server) {
       socket.destroy();
       return;

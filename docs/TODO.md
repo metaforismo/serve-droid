@@ -133,7 +133,7 @@ because its code path compiles.
 ## Deferred roadmap
 
 - [x] Safari and Firefox TinyH264 decoder fallback with bounded packet backpressure.
-- [ ] Audio streaming.
+- [x] Opt-in Opus audio streaming with mute-by-default playback and bounded backpressure.
 - [x] Opt-in raw H.264 and privacy-filtered JSONL session recording.
 - [x] Enforce recording byte/time limits with explicit verified cleanup.
 - [x] Recover partial manifests only when their owning process is dead.

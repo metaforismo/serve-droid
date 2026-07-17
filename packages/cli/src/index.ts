@@ -217,6 +217,7 @@ program
     (value) => Number.parseInt(value, 10),
     60,
   )
+  .option("--audio", "enable Android playback capture; browser playback remains muted")
   .option("--detach", "run in the background")
   .option("--child", "internal detached child mode")
   .action(async (device, local, command) => {
@@ -244,6 +245,7 @@ program
           String(local.recordMaxMinutes),
         );
       }
+      if (local.audio) args.push("--audio");
       const child = spawn(process.execPath, args, {
         detached: true,
         stdio: "ignore",
@@ -286,6 +288,7 @@ program
             },
           }
         : {}),
+      audio: Boolean(local.audio),
     });
     const session = await server.start();
     output(
