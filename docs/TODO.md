@@ -105,12 +105,12 @@ because its code path compiles.
 - [x] Expose versioned health, devices, session, observation, tree, screenshot, logs, action,
       app, permission, file, video, and control routes.
 - [x] Require authentication on device data, mutations, logs, video, and control.
-- [x] Expose the explicit 12-tool MCP surface over stdio.
+- [x] Expose the explicit 13-tool MCP surface over stdio.
 - [x] Return MCP image content plus structured observation metadata.
 - [x] Include Codex, Claude, Cursor, VS Code, and generic MCP examples.
 - [x] Ship an Agent Skill with observe-act-verify, deep-link, failure, and cleanup rules.
-- [ ] Add a dedicated element-targeting MCP action that never falls back to guessed coordinates.
-- [ ] Contract-test every MCP tool with an in-memory transport.
+- [x] Add a dedicated element-targeting MCP action that never falls back to guessed coordinates.
+- [x] Contract-test every MCP tool with an in-memory transport.
 - [ ] Add progress events for installs and pushes.
 - [ ] Test backpressure and malformed input across every public transport.
 
