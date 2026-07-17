@@ -90,7 +90,9 @@ because its code path compiles.
 - [x] Bounded searchable Logcat panel.
 - [x] APK/file drag-and-drop with safe server-side limits.
 - [x] Keyboard focus, ARIA labels, visible focus, reduced motion, and live status.
-- [x] Detect missing WebCodecs and explain the Chromium requirement.
+- [x] Prefer WebCodecs and lazily fall back to Tango TinyH264 in Safari and Firefox.
+- [x] Keep authenticated control and semantic inspection independent from video decoding.
+- [x] Record same-stream stable-Chrome fallback latency and process-CPU evidence against WebCodecs.
 - [x] Keep bearer tokens out of query strings, server logs, and non-loopback HTML.
 - [ ] Add a LAN token-entry screen and document fragment-based handoff.
 - [ ] Add package, priority, and tag Logcat filters plus pause/clear/copy controls.
@@ -130,7 +132,7 @@ because its code path compiles.
 
 ## Deferred roadmap
 
-- [ ] Safari and Firefox decoder fallback.
+- [x] Safari and Firefox TinyH264 decoder fallback with bounded packet backpressure.
 - [ ] Audio streaming.
 - [x] Opt-in raw H.264 and privacy-filtered JSONL session recording.
 - [x] Enforce recording byte/time limits with explicit verified cleanup.

@@ -51,6 +51,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:browser": "playwright test",
     "test:watch": "vitest",
     "typecheck": "tsc -b packages/core packages/server packages/mcp packages/cli --pretty false && pnpm --filter @serve-droid/web typecheck",
     "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",

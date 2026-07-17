@@ -24,7 +24,8 @@ sharing one observable browser session during development and debugging.
 - [Android SDK Platform Tools](https://developer.android.com/tools/releases/platform-tools) with
   `adb` on `PATH`, `ANDROID_HOME`, or `ANDROID_SDK_ROOT`
 - An Android 8 / API 26+ emulator or device visible in `adb devices -l`
-- Current Chrome or Edge for the browser cockpit
+- A current Chrome, Edge, Safari, or Firefox browser. Chromium uses WebCodecs; Safari and Firefox
+  use the higher-cost TinyH264 software fallback.
 
 Android Platform Tools are never downloaded silently or redistributed.
 
@@ -90,9 +91,10 @@ Read [SECURITY.md](SECURITY.md) before binding to a LAN interface.
 ## Supported and deferred
 
 v0.1 targets macOS, Linux, Windows, Android API 26+, local emulators, USB devices, Wi-Fi ADB,
-Chrome, and Edge. Installed AVD lifecycle controls and opt-in bounded local recording are included.
-Safari, Firefox, audio, cloud device labs, tunnels, accounts, multi-user roles, AVD
-creation/provisioning, iOS, and arbitrary shell access are deferred.
+Chrome, Edge, Safari, and Firefox. Installed AVD lifecycle controls, opt-in bounded local recording,
+and the TinyH264 browser fallback are included. Audio, cloud device labs, tunnels, accounts,
+multi-user roles, AVD creation/provisioning, iOS, and arbitrary shell access are deferred. See the
+[browser support matrix](docs/browser-support.md).
 
 ## Development
 

@@ -48,3 +48,20 @@ jobs:
           script: pnpm --filter @serve-droid/core test:device
         env:
           SERVE_DROID_DEVICE_TEST: "1"
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Install generated-stream test prerequisite
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
+      - run: pnpm test:browser

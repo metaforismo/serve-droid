@@ -6,6 +6,7 @@ import { EventEmitter } from "node:events";
 import { AdbServerClient } from "@yume-chan/adb";
 import { AdbServerNodeTcpConnector } from "@yume-chan/adb-server-node-tcp";
 import { AdbScrcpyClient, AdbScrcpyOptionsLatest } from "@yume-chan/adb-scrcpy";
+import { AndroidAvcLevel, AndroidAvcProfile, ScrcpyCodecOptions } from "@yume-chan/scrcpy";
 import type { Adb } from "@yume-chan/adb";
 
 export interface VideoSourceEvents {
@@ -77,6 +78,11 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
       audio: false,
       control: true,
       videoCodec: "h264",
+      videoCodecOptions: new ScrcpyCodecOptions({
+        profile: AndroidAvcProfile.Baseline,
+        level: AndroidAvcLevel.Level4,
+        maxBframes: 0,
+      }),
       videoBitRate: 4_000_000,
       maxFps: 60,
       maxSize: 1920,
