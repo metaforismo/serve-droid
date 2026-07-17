@@ -14,8 +14,8 @@
   available now.
 - Named authenticated tunnel hardening and collaboration roles. Expiring foreground tunnel support
   is available now.
-- AVD creation/provisioning and a multi-device grid. Installed AVD discovery and explicit
-  start/stop lifecycle controls are available now.
+- AVD creation/provisioning. Installed AVD lifecycle controls and the bounded local multi-device
+  grid are available now.
 
 Items move into a release only after a scoped issue defines security and acceptance criteria.
 The detailed status and certification gates live in [docs/TODO.md](docs/TODO.md).

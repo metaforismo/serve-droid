@@ -229,6 +229,29 @@ describe("authenticated HTTP server", () => {
     expect(packet?.subarray(8)).toEqual(Buffer.from([1, 2, 3]));
     socket.close();
   });
+
+  it("allows framing only for an explicit exact loopback grid origin", async () => {
+    const service = new AndroidService(new FakeAdb(), device);
+    expect(
+      () =>
+        new ServeDroidServer(service, {
+          videoSource: new FakeVideo(),
+          frameAncestor: "https://example.com",
+        }),
+    ).toThrow(/127\.0\.0\.1/u);
+
+    const server = new ServeDroidServer(service, {
+      videoSource: new FakeVideo(),
+      frameAncestor: "http://127.0.0.1:9001",
+    });
+    servers.push(server);
+    const session = await server.start();
+    const response = await fetch(session.url);
+    expect(response.headers.get("x-frame-options")).toBeNull();
+    expect(response.headers.get("content-security-policy")).toContain(
+      "frame-ancestors http://127.0.0.1:9001",
+    );
+  });
 });
 
 describe("audio wire format", () => {
