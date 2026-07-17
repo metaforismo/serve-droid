@@ -4,11 +4,10 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "baseUrl": ".",
     "paths": {
-      "@serve-droid/core": ["packages/core/src/index.ts"],
-      "@serve-droid/server": ["packages/server/src/index.ts"],
-      "@serve-droid/mcp": ["packages/mcp/src/index.ts"]
+      "@serve-droid/core": ["./packages/core/src/index.ts"],
+      "@serve-droid/server": ["./packages/server/src/index.ts"],
+      "@serve-droid/mcp": ["./packages/mcp/src/index.ts"]
     },
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -19,6 +18,7 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "types": ["node"],
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   }
