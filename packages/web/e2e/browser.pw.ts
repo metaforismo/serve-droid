@@ -100,7 +100,7 @@ test("selects an available video decoder without disabling the cockpit", async (
   const expected = hasWebCodecs ? "WebCodecs" : "TinyH264";
   await expect(page.locator(".device-meta")).toContainText(expected);
   await expect(page.locator('button[title="Back"]')).toBeEnabled();
-  await expect(page.getByRole("button", { name: /UI tree/u })).toBeEnabled();
+  await expect(page.getByRole("tab", { name: /UI tree/u })).toBeEnabled();
 });
 
 test("accepts a LAN token through the URL fragment and removes it from history", async ({
@@ -242,7 +242,40 @@ test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page
   );
 
   await page.goto("/?demo");
+  await expect(page.getByText("Active session", { exact: true })).toBeVisible();
+  await expect(page.getByText("Agent context", { exact: true })).toBeVisible();
   await expect(page.getByText("3 of 3 entries", { exact: true })).toBeVisible();
+
+  const deviceCanvas = page.getByLabel("Live Android device. Click to tap or drag to swipe.");
+  const canvasBounds = await deviceCanvas.boundingBox();
+  expect(canvasBounds).not.toBeNull();
+  await page.mouse.click(
+    canvasBounds!.x + canvasBounds!.width * 0.5,
+    canvasBounds!.y + canvasBounds!.height * 0.5,
+  );
+  await expect.poll(() => actions.some((entry) => entry.type === "tap")).toBe(true);
+  await page.mouse.move(
+    canvasBounds!.x + canvasBounds!.width * 0.3,
+    canvasBounds!.y + canvasBounds!.height * 0.7,
+  );
+  await page.mouse.down();
+  await page.waitForTimeout(70);
+  await page.mouse.move(
+    canvasBounds!.x + canvasBounds!.width * 0.72,
+    canvasBounds!.y + canvasBounds!.height * 0.3,
+    { steps: 4 },
+  );
+  await page.mouse.up();
+  await expect.poll(() => actions.some((entry) => entry.type === "swipe")).toBe(true);
+  const swipe = actions.find((entry) => entry.type === "swipe")!;
+  expect(swipe.x1).toBeGreaterThanOrEqual(0);
+  expect(swipe.y1).toBeGreaterThanOrEqual(0);
+  expect(swipe.x2).toBeLessThanOrEqual(1);
+  expect(swipe.y2).toBeLessThanOrEqual(1);
+  expect(swipe.durationMs).toBeGreaterThanOrEqual(50);
+  expect(swipe.durationMs).toBeLessThanOrEqual(3_000);
+  await expect(page.getByText("Swipe sent", { exact: true })).toBeVisible();
+
   await page.getByLabel("Search Logcat").fill("crash");
   await page.getByLabel("Logcat priority").selectOption("E");
   await expect(page.getByText("1 of 3 entries", { exact: true })).toBeVisible();
@@ -285,6 +318,12 @@ test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page
   await expect(page.getByRole("status").filter({ hasText: "Installed fixture.apk" })).toContainText(
     "Done",
   );
+
+  await page.setViewportSize({ width: 820, height: 900 });
+  await expect(page.getByText("Agent context", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true);
 });
 
 test("falls back to TinyH264 when WebCodecs is unavailable", async ({ page }) => {

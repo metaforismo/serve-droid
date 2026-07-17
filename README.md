@@ -20,7 +20,8 @@ is tracked separately in the release checklist._
 
 ## What you get
 
-- H.264 device streaming and control in a local browser cockpit.
+- H.264 device streaming in a responsive browser cockpit with click-to-tap and drag-to-swipe
+  controls.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
 - Secure LAN token entry and bounded clipboard paste into the focused Android field.

@@ -99,6 +99,9 @@ because its code path compiles.
 - [x] Add priority and combined tag/message Logcat filters plus pause/clear/copy controls.
 - [x] Add clipboard UI with manual entry and browser Clipboard API loading.
 - [x] Add byte-accurate browser upload progress with a separate Android install/push phase.
+- [x] Add a responsive active-device sidebar and structured inspector workspace.
+- [x] Distinguish browser taps from swipes with pointer capture, normalized bounds, and bounded
+      duration.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 
 ## CLI, HTTP, MCP, and Agent Skill
