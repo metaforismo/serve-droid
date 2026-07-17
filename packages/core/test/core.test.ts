@@ -88,6 +88,25 @@ class HierarchyAdb extends FakeAdb {
   }
 }
 
+class RelaunchLogAdb extends FakeAdb {
+  public readonly process = new FakeProcess();
+  readonly #pids = ["101", "202"];
+
+  public override async run(
+    args: readonly string[],
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    this.calls.push([...args]);
+    if (args[0] === "shell" && args[1] === "pidof") {
+      return { stdout: `${this.#pids.shift() ?? "202"}\n`, stderr: "", exitCode: 0 };
+    }
+    return { stdout: "", stderr: "", exitCode: 0 };
+  }
+
+  public override spawn(): never {
+    return this.process as never;
+  }
+}
+
 const testDevice: DeviceSummary = {
   serial: "emulator-5554",
   state: "device",
@@ -232,6 +251,27 @@ describe("logs and foreground state", () => {
       packageName: null,
       activity: null,
     });
+  });
+
+  it("refreshes a tracked package PID after an app relaunch", async () => {
+    const adb = new RelaunchLogAdb();
+    const service = new AndroidService(adb, testDevice);
+    service.startLogs();
+    adb.process.stdout.write(
+      "07-17 12:34:56.789  101  101 I Fixture: before relaunch\n" +
+        "07-17 12:34:57.789  202  202 I Fixture: after relaunch\n",
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    await expect(service.readLogs("0", "dev.fixture")).resolves.toMatchObject({
+      entries: [{ pid: 101, message: "before relaunch" }],
+    });
+    await service.actions.launch("dev.fixture");
+    await expect(service.readLogs("0", "dev.fixture")).resolves.toMatchObject({
+      entries: [{ pid: 202, message: "after relaunch" }],
+    });
+    expect(adb.calls.filter((call) => call[1] === "pidof")).toHaveLength(2);
+    service.stop();
   });
 });
 

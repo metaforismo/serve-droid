@@ -32,3 +32,12 @@ The scrcpy video helper has one restart attempt per session. The first startup o
 replaces the helper while keeping browser clients connected. A second failure is terminal and is
 reported as `TRANSPORT_FAILED` with bounded restart metadata; duplicate errors from the failed
 helper cannot consume additional attempts.
+
+Log streams are scoped to the current foreground package and PID by default. Pass `package=<id>` to
+follow a different package or `system=true` to opt into unfiltered system logs. These options are
+mutually exclusive. A successful launch, package deep link, stop, clear, or uninstall invalidates
+the cached PID; tracked packages attempt to resolve the replacement PID before the action completes
+and retry safely when new entries arrive, so a long-lived stream cannot continue accepting entries
+from the previous process. CLI `logs` and MCP `android_read_logs` use the foreground package by
+default, accept an explicit package override, and require an explicit `--system` or `system: true`
+opt-in for unfiltered logs.

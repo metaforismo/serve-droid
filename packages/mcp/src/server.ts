@@ -51,9 +51,13 @@ export interface McpActions {
 
 export interface McpAndroidService {
   actions: McpActions;
-  logs: { read(since: string): { entries: LogEntry[]; nextCursor: string } };
   startLogs(): void;
   stop(): void;
+  foreground(): Promise<Observation["foregroundApp"]>;
+  readLogs(
+    since: string,
+    packageName?: string,
+  ): Promise<{ entries: LogEntry[]; nextCursor: string }>;
   observe(logsSince: string): Promise<Omit<Observation, "screenshot">>;
   screenshot(options: { width?: number; quality?: number }): Promise<Buffer>;
   tree(): Promise<UiElement[]>;
@@ -350,15 +354,31 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
     {
       description:
         "Read bounded incremental Android logs. Start a browser session first for a persistent log cursor.",
-      inputSchema: z.object({ since: z.string().default("0") }),
+      inputSchema: z.object({
+        since: z.string().default("0"),
+        packageName: z.string().min(1).optional(),
+        system: z.boolean().default(false),
+      }),
     },
-    ({ since }) =>
-      Promise.resolve(
-        text({
-          schemaVersion: 1,
-          ...(activeSession?.service.logs.read(since) ?? { entries: [], nextCursor: since }),
-        }),
-      ),
+    async ({ since, packageName, system }) => {
+      if (packageName && system) {
+        throw new ServeDroidError(
+          "INVALID_ARGUMENT",
+          "Choose either packageName or system logs, not both.",
+        );
+      }
+      const scopedPackage = activeSession
+        ? system
+          ? undefined
+          : packageName || (await activeSession.service.foreground()).packageName || undefined
+        : packageName;
+      return text({
+        schemaVersion: 1,
+        ...(activeSession
+          ? await activeSession.service.readLogs(since, scopedPackage)
+          : { entries: [], nextCursor: since }),
+      });
+    },
   );
 
   return mcp;

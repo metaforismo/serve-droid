@@ -542,15 +542,25 @@ program
   .command("logs")
   .description("Read bounded structured Logcat entries.")
   .option("--follow", "follow new entries")
-  .option("--package <id>", "filter to the current PID of a package")
+  .option("--package <id>", "filter to the current PID of a package instead of the foreground app")
+  .option("--system", "opt in to unfiltered system logs")
   .option("--since <cursor>", "numeric cursor", "0")
   .option("--limit <count>", "maximum snapshot entries", (value) => Number.parseInt(value, 10), 500)
   .action(async (local, command) => {
     const options = globalOptions(command);
     const current = await service(options);
+    if (local.package && local.system) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Choose either --package or --system, not both.",
+      );
+    }
+    const packageName = local.system
+      ? undefined
+      : local.package || (await current.foreground()).packageName || undefined;
     if (!local.follow) {
       const snapshot = await current.logSnapshot({
-        packageName: local.package,
+        packageName,
         since: local.since,
         limit: local.limit,
       });
@@ -559,9 +569,11 @@ program
     }
     current.startLogs();
     const write = (entry: unknown) => output(entry, options, JSON.stringify(entry));
-    current.logs.on("entry", write);
+    const initial = await current.readLogs(local.since, packageName);
+    for (const entry of initial.entries) write(entry);
+    const unsubscribe = current.subscribeLogs(packageName, write);
     const stop = () => {
-      current.logs.off("entry", write);
+      unsubscribe();
       current.stop();
       process.exit();
     };

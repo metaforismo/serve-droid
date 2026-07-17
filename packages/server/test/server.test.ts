@@ -181,6 +181,23 @@ describe("authenticated HTTP server", () => {
     expect(adb.calls.some((call) => call.includes("tap"))).toBe(false);
   });
 
+  it("rejects conflicting package and system Logcat scopes", async () => {
+    const server = new ServeDroidServer(new AndroidService(new FakeAdb(), device), {
+      token: "test-token",
+      videoSource: new FakeVideo(),
+    });
+    servers.push(server);
+    const session = await server.start();
+    const response = await fetch(`${session.url}/api/v1/logs?package=dev.fixture&system=true`, {
+      headers: { authorization: "Bearer test-token" },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_ARGUMENT" },
+    });
+  });
+
   it("authenticates, validates, and revokes visible remote-access state", async () => {
     const server = new ServeDroidServer(new AndroidService(new FakeAdb(), device), {
       token: "test-token",
