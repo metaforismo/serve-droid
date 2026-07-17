@@ -62,4 +62,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
+      - name: Install generated-stream test prerequisite
+        run: sudo apt-get update && sudo apt-get install --yes ffmpeg
       - run: pnpm test:browser
