@@ -4,8 +4,46 @@ import { AndroidActions } from "./actions.js";
 import { getDisplayInfo, listDevices, selectDevice } from "./devices.js";
 import { LogBuffer, parseLogLine } from "./logs.js";
 import { parseUiHierarchy } from "./ui-tree.js";
-import type { DeviceSummary, ForegroundApp, LogEntry, Observation, UiElement } from "./types.js";
+import { ServeDroidError } from "./errors.js";
+import type {
+  DeviceSummary,
+  DisplayInfo,
+  ForegroundApp,
+  LogEntry,
+  Observation,
+  UiElement,
+} from "./types.js";
 import { SCHEMA_VERSION } from "./types.js";
+
+const HIERARCHY_CAPTURE_ATTEMPTS = 2;
+
+interface HierarchySnapshot {
+  display: DisplayInfo;
+  foregroundApp: ForegroundApp;
+  elements: UiElement[];
+}
+
+function sameDisplay(left: DisplayInfo, right: DisplayInfo): boolean {
+  return (
+    left.width === right.width &&
+    left.height === right.height &&
+    left.orientation === right.orientation
+  );
+}
+
+function sameForeground(left: ForegroundApp, right: ForegroundApp): boolean {
+  return (
+    left.packageName === right.packageName &&
+    left.activity === right.activity &&
+    left.pid === right.pid
+  );
+}
+
+function hierarchyMatchesForeground(elements: readonly UiElement[], foreground: ForegroundApp) {
+  if (!foreground.packageName) return true;
+  const packages = new Set(elements.map((element) => element.packageName).filter(Boolean));
+  return packages.size === 0 || packages.has(foreground.packageName);
+}
 
 export function parseForeground(output: string): Omit<ForegroundApp, "pid"> {
   const component = findForegroundComponent(output);
@@ -108,14 +146,47 @@ export class AndroidService {
     };
   }
 
-  public async tree(): Promise<UiElement[]> {
-    const display = await getDisplayInfo(this.adb, this.device.serial);
+  async #dumpHierarchy(display: DisplayInfo): Promise<UiElement[]> {
     const xml = await checkedRun(this.adb, ["exec-out", "uiautomator", "dump", "/dev/tty"], {
       serial: this.device.serial,
       timeoutMs: 10_000,
     });
     const start = xml.indexOf("<?xml");
     return parseUiHierarchy(start >= 0 ? xml.slice(start) : xml, display);
+  }
+
+  async #freshHierarchy(): Promise<HierarchySnapshot> {
+    let lastBefore: Pick<HierarchySnapshot, "display" | "foregroundApp"> | undefined;
+    let lastAfter: Pick<HierarchySnapshot, "display" | "foregroundApp"> | undefined;
+    for (let attempt = 0; attempt < HIERARCHY_CAPTURE_ATTEMPTS; attempt += 1) {
+      const [display, foregroundApp] = await Promise.all([
+        getDisplayInfo(this.adb, this.device.serial),
+        this.foreground(),
+      ]);
+      const elements = await this.#dumpHierarchy(display);
+      const [nextDisplay, nextForegroundApp] = await Promise.all([
+        getDisplayInfo(this.adb, this.device.serial),
+        this.foreground(),
+      ]);
+      if (
+        sameDisplay(display, nextDisplay) &&
+        sameForeground(foregroundApp, nextForegroundApp) &&
+        hierarchyMatchesForeground(elements, nextForegroundApp)
+      ) {
+        return { display: nextDisplay, foregroundApp: nextForegroundApp, elements };
+      }
+      lastBefore = { display, foregroundApp };
+      lastAfter = { display: nextDisplay, foregroundApp: nextForegroundApp };
+    }
+    throw new ServeDroidError(
+      "TRANSPORT_FAILED",
+      "UI hierarchy did not stabilize after a display, foreground-app, or package change.",
+      { attempts: HIERARCHY_CAPTURE_ATTEMPTS, before: lastBefore, after: lastAfter },
+    );
+  }
+
+  public async tree(): Promise<UiElement[]> {
+    return (await this.#freshHierarchy()).elements;
   }
 
   public async screenshot(options: { width?: number; quality?: number } = {}): Promise<Buffer> {
@@ -156,8 +227,7 @@ export class AndroidService {
   }
 
   public async observe(logsSince = "0"): Promise<Omit<Observation, "screenshot">> {
-    const display = await getDisplayInfo(this.adb, this.device.serial);
-    const [foregroundApp, elements] = await Promise.all([this.foreground(), this.tree()]);
+    const { display, foregroundApp, elements } = await this.#freshHierarchy();
     const logs = this.logs.read(logsSince, foregroundApp.pid ?? undefined);
     return {
       schemaVersion: SCHEMA_VERSION,

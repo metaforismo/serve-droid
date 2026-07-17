@@ -22,3 +22,8 @@ server does not invent a percentage for Android-side work. Successful responses 
 Rotation actions complete only after the device reports the requested logical orientation. If
 display metadata does not settle within five seconds, the action fails instead of allowing a later
 normalized coordinate action to use stale dimensions.
+
+UI hierarchy capture verifies display metadata and foreground app identity before and after the
+UIAutomator dump, then checks declared element packages against that app. A context or package
+change triggers one fresh capture; a second mismatch fails with `TRANSPORT_FAILED` rather than
+returning elements from a mixed snapshot. Hierarchies that omit package attributes remain valid.
