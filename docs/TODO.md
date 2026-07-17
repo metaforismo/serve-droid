@@ -95,7 +95,7 @@ because its code path compiles.
 - [x] Record same-stream stable-Chrome fallback latency and process-CPU evidence against WebCodecs.
 - [x] Keep bearer tokens out of query strings, server logs, and non-loopback HTML.
 - [ ] Add a LAN token-entry screen and document fragment-based handoff.
-- [ ] Add package, priority, and tag Logcat filters plus pause/clear/copy controls.
+- [x] Add priority and combined tag/message Logcat filters plus pause/clear/copy controls.
 - [ ] Add clipboard UI and file-transfer progress events.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 

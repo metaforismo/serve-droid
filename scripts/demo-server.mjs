@@ -89,6 +89,8 @@ const observation = {
     {
       cursor: "1",
       timestamp: now,
+      pid: 7412,
+      tid: 7412,
       priority: "I",
       tag: "FixtureActivity",
       message: "Session attached to Pixel 9 Pro",
@@ -96,6 +98,8 @@ const observation = {
     {
       cursor: "2",
       timestamp: "2026-07-17T12:42:18.620Z",
+      pid: 7412,
+      tid: 7428,
       priority: "W",
       tag: "AgentLoop",
       message: "Waiting for verified action",
@@ -103,6 +107,8 @@ const observation = {
     {
       cursor: "3",
       timestamp: "2026-07-17T12:42:18.820Z",
+      pid: 7412,
+      tid: 7428,
       priority: "I",
       tag: "ServeDroid",
       message: "UI hierarchy contains 3 targetable elements",
@@ -125,6 +131,15 @@ const server = createServer(async (request, response) => {
   if (url.pathname === "/api/v1/screenshot") {
     response.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
     return response.end(deviceScreen);
+  }
+  if (url.pathname === "/api/v1/remote-access") {
+    return json(response, {
+      schemaVersion: 1,
+      active: false,
+      provider: null,
+      publicUrl: null,
+      expiresAt: null,
+    });
   }
   if (url.pathname === "/api/v1/actions" || url.pathname === "/api/v1/files") {
     request.resume();

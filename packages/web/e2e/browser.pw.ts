@@ -93,6 +93,110 @@ test("selects an available video decoder without disabling the cockpit", async (
   await expect(page.getByRole("button", { name: /UI tree/u })).toBeEnabled();
 });
 
+test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page }) => {
+  let releaseFollowup = false;
+  let followupDelivered = false;
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: () => Promise.resolve() },
+    });
+  });
+  await page.route("**/api/v1/remote-access", async (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ schemaVersion: 1, active: false }),
+    }),
+  );
+  await page.route("**/api/v1/observe?**", async (route) => {
+    const includeLogs = new URL(route.request().url()).searchParams.get("logsSince") === "0";
+    const includeFollowup = releaseFollowup && !followupDelivered;
+    if (includeFollowup) followupDelivered = true;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        schemaVersion: 1,
+        timestamp: "2026-07-17T12:42:18.420Z",
+        device: { serial: "emulator-demo", model: "Pixel 9 Pro", apiLevel: 35 },
+        display: { width: 1080, height: 2400, orientation: "portrait" },
+        foregroundApp: { packageName: "dev.servedroid.fixture", activity: ".MainActivity" },
+        screenshot: { mimeType: "image/jpeg", width: 1080, height: 2400, url: "/fixture.jpg" },
+        elements: [],
+        logs: includeLogs
+          ? [
+              {
+                cursor: "1",
+                timestamp: "2026-07-17T12:42:18.420Z",
+                pid: 7412,
+                tid: 7412,
+                priority: "I",
+                tag: "FixtureActivity",
+                message: "Session attached",
+              },
+              {
+                cursor: "2",
+                timestamp: "2026-07-17T12:42:18.620Z",
+                pid: 7412,
+                tid: 7428,
+                priority: "W",
+                tag: "AgentLoop",
+                message: "Waiting for action",
+              },
+              {
+                cursor: "3",
+                timestamp: "2026-07-17T12:42:18.820Z",
+                pid: 7412,
+                tid: 7428,
+                priority: "E",
+                tag: "FixtureActivity",
+                message: "Intentional crash captured",
+              },
+            ]
+          : includeFollowup
+            ? [
+                {
+                  cursor: "4",
+                  timestamp: "2026-07-17T12:42:20.820Z",
+                  pid: 7412,
+                  tid: 7428,
+                  priority: "E",
+                  tag: "FixtureActivity",
+                  message: "Second crash captured while paused",
+                },
+              ]
+            : [],
+        nextLogCursor: includeFollowup ? "4" : "3",
+      }),
+    });
+  });
+  await page.route("**/fixture.jpg", async (route) =>
+    route.fulfill({ status: 204, contentType: "image/jpeg", body: "" }),
+  );
+
+  await page.goto("/?demo");
+  await expect(page.getByText("3 of 3 entries", { exact: true })).toBeVisible();
+  await page.getByLabel("Search Logcat").fill("crash");
+  await page.getByLabel("Logcat priority").selectOption("E");
+  await expect(page.getByText("1 of 3 entries", { exact: true })).toBeVisible();
+  await expect(page.getByText("Intentional crash captured", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Copy visible logs" }).click();
+  await expect(page.getByRole("button", { name: "1 log copied" })).toBeEnabled();
+  await page.getByRole("button", { name: "Pause Logcat" }).click();
+  await expect(page.getByRole("button", { name: "Resume Logcat" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  releaseFollowup = true;
+  await page.waitForTimeout(2_200);
+  await expect(page.getByText("1 of 3 entries", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Resume Logcat" }).click();
+  await expect(page.getByText("2 of 4 entries", { exact: true })).toBeVisible();
+  await expect(page.getByText("Second crash captured while paused", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Clear Logcat" }).click();
+  await expect(page.getByText("Waiting for app logs.", { exact: true })).toBeVisible();
+});
+
 test("falls back to TinyH264 when WebCodecs is unavailable", async ({ page }) => {
   await page.addInitScript(() => {
     Reflect.deleteProperty(globalThis, "VideoDecoder");
