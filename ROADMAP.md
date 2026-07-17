@@ -7,7 +7,8 @@
 
 ## After v0.1 validation
 
-- Native scrcpy transport performance hardening and audio.
+- Native scrcpy transport performance hardening and an API 30+ opt-in audio matrix. Initial audio
+  streaming is available now.
 - Safari/Firefox decoder performance hardening. The TinyH264 compatibility path is available now.
 - Rich trace export and browser recording controls. Bounded CLI opt-in H.264/event recording is
   available now.

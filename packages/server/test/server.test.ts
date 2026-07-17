@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { WebSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AndroidService,
@@ -11,7 +12,7 @@ import {
   type DeviceSummary,
   type RunResult,
 } from "../../core/src/index.js";
-import { ServeDroidServer } from "../src/server.js";
+import { canSendAudio, encodeAudioPacket, ServeDroidServer } from "../src/server.js";
 import { SCRCPY_SERVER_SHA256, type VideoSource, type VideoSourceEvents } from "../src/video.js";
 
 class FakeProcess extends EventEmitter {
@@ -132,6 +133,57 @@ describe("authenticated HTTP server", () => {
     expect(events).not.toContain("user-secret-text");
     expect(events).not.toContain("token-that-must-not-be-recorded");
     expect(events).not.toContain("Logcat");
+  });
+
+  it("authenticates audio sockets and relays state plus timestamped packets", async () => {
+    const source = new FakeVideo();
+    const server = new ServeDroidServer(new AndroidService(new FakeAdb(), device), {
+      token: "test-token",
+      videoSource: source,
+      audio: true,
+    });
+    servers.push(server);
+    const session = await server.start();
+    const socket = new WebSocket(session.url.replace(/^http/u, "ws") + "/api/v1/audio", [
+      "serve-droid",
+      "token.test-token",
+    ]);
+    const messages: Array<string | Buffer> = [];
+    socket.on("message", (data, binary) =>
+      messages.push(binary ? Buffer.from(data as Buffer) : String(data)),
+    );
+    await new Promise<void>((resolvePromise, reject) => {
+      socket.once("open", resolvePromise);
+      socket.once("error", reject);
+    });
+    source.emit("audioState", { enabled: true, available: true, codec: "opus" });
+    source.emit("audioData", { data: Buffer.from([1, 2, 3]), pts: 42n });
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 20));
+
+    expect(
+      messages.some(
+        (message) => typeof message === "string" && message.includes('"available":true'),
+      ),
+    ).toBe(true);
+    const packet = messages.find(Buffer.isBuffer);
+    expect(packet?.readBigInt64BE(0)).toBe(42n);
+    expect(packet?.subarray(8)).toEqual(Buffer.from([1, 2, 3]));
+    socket.close();
+  });
+});
+
+describe("audio wire format", () => {
+  it("prefixes each packet with a signed 64-bit presentation timestamp", () => {
+    const packet = encodeAudioPacket(Buffer.from([9, 8]), 123n);
+    expect(packet.readBigInt64BE(0)).toBe(123n);
+    expect(packet.subarray(8)).toEqual(Buffer.from([9, 8]));
+  });
+
+  it("bounds socket backpressure", () => {
+    expect(canSendAudio(0)).toBe(true);
+    expect(canSendAudio(512 * 1024 - 1)).toBe(true);
+    expect(canSendAudio(512 * 1024)).toBe(false);
+    expect(canSendAudio(Number.POSITIVE_INFINITY)).toBe(false);
   });
 });
 

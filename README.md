@@ -38,6 +38,14 @@ npx serve-droid start --detach
 npx serve-droid list --json
 ```
 
+Device playback audio is opt-in and browser playback remains muted until a human enables it:
+
+```bash
+npx serve-droid start --audio
+```
+
+See [device audio and privacy](docs/audio.md).
+
 Open the printed local URL. The server listens on `127.0.0.1`, generates a random token, and injects
 it into the local UI. To select a device:
 
@@ -92,9 +100,9 @@ Read [SECURITY.md](SECURITY.md) before binding to a LAN interface.
 
 v0.1 targets macOS, Linux, Windows, Android API 26+, local emulators, USB devices, Wi-Fi ADB,
 Chrome, Edge, Safari, and Firefox. Installed AVD lifecycle controls, opt-in bounded local recording,
-and the TinyH264 browser fallback are included. Audio, cloud device labs, tunnels, accounts,
-multi-user roles, AVD creation/provisioning, iOS, and arbitrary shell access are deferred. See the
-[browser support matrix](docs/browser-support.md).
+the TinyH264 browser fallback, and opt-in device audio for API 30+ are included. Cloud device labs,
+tunnels, accounts, multi-user roles, AVD creation/provisioning, iOS, and arbitrary shell access are
+deferred. See the [browser support matrix](docs/browser-support.md).
 
 ## Development
 

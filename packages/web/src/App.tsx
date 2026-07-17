@@ -10,6 +10,7 @@ import {
   type UiElement,
 } from "./api.js";
 import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
+import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
 
 type Panel = "logs" | "tree";
 const demoMode = new URLSearchParams(location.search).has("demo");
@@ -31,6 +32,8 @@ export function App() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [decoder, setDecoder] = useState<"WebCodecs" | "TinyH264" | "">("");
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const [audioStatus, setAudioStatus] = useState("Audio muted");
 
   const refresh = useCallback(async () => {
     try {
@@ -112,6 +115,65 @@ export function App() {
       player?.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (!audioPlaying || demoMode) return;
+    let cancelled = false;
+    let socket: WebSocket | undefined;
+    let reconnectTimer = 0;
+    let reconnectDelay = 250;
+    let player: OpusAudioPlayer | undefined;
+
+    const connect = () => {
+      if (cancelled) return;
+      socket = authenticatedWebSocket("/api/v1/audio");
+      socket.binaryType = "arraybuffer";
+      socket.onopen = () => {
+        reconnectDelay = 250;
+        setAudioStatus("Audio connected");
+      };
+      socket.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          const state = JSON.parse(event.data) as {
+            available: boolean;
+            codec: string | null;
+            reason?: string;
+          };
+          setAudioStatus(
+            state.available
+              ? `Audio · ${state.codec ?? "ready"}`
+              : state.reason || "Audio unavailable",
+          );
+          return;
+        }
+        player?.push(event.data as ArrayBuffer);
+      };
+      socket.onclose = (event) => {
+        if (cancelled || event.code === 1000) return;
+        setAudioStatus("Audio reconnecting…");
+        reconnectTimer = window.setTimeout(connect, reconnectDelay);
+        reconnectDelay = nextAudioReconnectDelay(reconnectDelay);
+      };
+    };
+
+    void OpusAudioPlayer.create(setAudioStatus)
+      .then((created) => {
+        if (cancelled) return created.close();
+        player = created;
+        connect();
+      })
+      .catch((reason: unknown) => {
+        setAudioStatus(reason instanceof Error ? reason.message : String(reason));
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(reconnectTimer);
+      socket?.close(1000);
+      void player?.close();
+      setAudioStatus("Audio muted");
+    };
+  }, [audioPlaying]);
 
   const filteredElements = useMemo(() => {
     const needle = query.toLocaleLowerCase();
@@ -224,6 +286,14 @@ export function App() {
           <button title="Power" onClick={() => void action({ type: "key", key: "power" })}>
             ⏻
           </button>
+          <button
+            title={audioPlaying ? "Mute audio" : "Unmute audio"}
+            aria-label={audioPlaying ? "Mute device audio" : "Unmute device audio"}
+            aria-pressed={audioPlaying}
+            onClick={() => setAudioPlaying((value) => !value)}
+          >
+            {audioPlaying ? "🔊" : "🔇"}
+          </button>
         </aside>
 
         <div className="stage">
@@ -250,7 +320,9 @@ export function App() {
               />
             )}
           </div>
-          <p className="hint">Drop an APK to install · Drop any other file to push to Downloads</p>
+          <p className="hint">
+            {audioStatus} · Drop an APK to install · Drop any other file to push to Downloads
+          </p>
         </div>
 
         <aside className="inspector">

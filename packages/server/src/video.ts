@@ -11,9 +11,18 @@ import type { Adb } from "@yume-chan/adb";
 
 export interface VideoSourceEvents {
   data: [Buffer];
+  audioData: [{ data: Buffer; pts: bigint }];
+  audioState: [AudioState];
   error: [Error];
   close: [];
   size: [{ width: number; height: number }];
+}
+
+export interface AudioState {
+  enabled: boolean;
+  available: boolean;
+  codec: "opus" | null;
+  reason?: string;
 }
 
 export interface VideoSource extends EventEmitter<VideoSourceEvents> {
@@ -25,6 +34,7 @@ const SCRCPY_VERSION = "3.3.3";
 const REMOTE_SERVER = `/data/local/tmp/serve-droid-scrcpy-server-${SCRCPY_VERSION}`;
 type TangoClient = AdbScrcpyClient<AdbScrcpyOptionsLatest<true>>;
 type TangoVideoStream = Awaited<TangoClient["videoStream"]>;
+type TangoAudioStream = Exclude<Awaited<TangoClient["audioStream"]>, undefined>;
 type TangoOutputStream = TangoClient["output"];
 
 function adbServerAddress(env: NodeJS.ProcessEnv = process.env): { host: string; port: number } {
@@ -61,7 +71,10 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
   #reader: { cancel(): Promise<void>; releaseLock(): void } | undefined;
   #stopped = false;
 
-  public constructor(private readonly serial: string) {
+  public constructor(
+    private readonly serial: string,
+    private readonly captureAudio = false,
+  ) {
     super();
   }
 
@@ -75,7 +88,9 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
     await AdbScrcpyClient.pushServer(adb, file as never, REMOTE_SERVER);
     const options = new AdbScrcpyOptionsLatest({
       video: true,
-      audio: false,
+      audio: this.captureAudio,
+      audioCodec: "opus",
+      audioSource: "playback",
       control: true,
       videoCodec: "h264",
       videoCodecOptions: new ScrcpyCodecOptions({
@@ -98,6 +113,11 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
     this.emit("size", { width: video.width, height: video.height });
     video.sizeChanged((size) => this.emit("size", size));
     void this.#consumeVideo(video);
+    if (this.captureAudio) {
+      void this.#startAudio(client);
+    } else {
+      this.emit("audioState", { enabled: false, available: false, codec: null });
+    }
     void client.exited
       .then(() => {
         if (!this.#stopped) this.emit("error", new Error("scrcpy server exited unexpectedly."));
@@ -133,6 +153,59 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
         this.emit("error", error instanceof Error ? error : new Error(String(error)));
     } finally {
       reader.releaseLock();
+    }
+  }
+
+  async #consumeAudio(audio: Extract<TangoAudioStream, { type: "success" }>): Promise<void> {
+    const reader = audio.stream.getReader();
+    try {
+      while (!this.#stopped) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value.type !== "data" || value.pts === undefined) continue;
+        this.emit("audioData", { data: Buffer.from(value.data), pts: value.pts });
+      }
+    } catch (error) {
+      if (!this.#stopped)
+        this.emit("audioState", {
+          enabled: true,
+          available: false,
+          codec: null,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  async #startAudio(client: TangoClient): Promise<void> {
+    try {
+      const audio = await client.audioStream;
+      if (!audio || audio.type === "disabled") {
+        this.emit("audioState", {
+          enabled: true,
+          available: false,
+          codec: null,
+          reason: "Android audio capture is unavailable on this device.",
+        });
+      } else if (audio.type === "errored") {
+        this.emit("audioState", {
+          enabled: true,
+          available: false,
+          codec: null,
+          reason: "The device could not start the requested Opus audio encoder.",
+        });
+      } else {
+        this.emit("audioState", { enabled: true, available: true, codec: "opus" });
+        void this.#consumeAudio(audio);
+      }
+    } catch (error) {
+      this.emit("audioState", {
+        enabled: true,
+        available: false,
+        codec: null,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
