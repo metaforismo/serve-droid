@@ -1,6 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { AdbClient, AndroidService, listDevices, resolveAdbPath } from "@serve-droid/core";
+import {
+  AdbClient,
+  AndroidService,
+  ServeDroidError,
+  findElement,
+  listDevices,
+  resolveAdbPath,
+  type DeviceSummary,
+  type LogEntry,
+  type Observation,
+  type SessionInfo,
+  type UiElement,
+} from "@serve-droid/core";
 import { ServeDroidServer } from "@serve-droid/server";
 import { z } from "zod";
 
@@ -8,8 +20,75 @@ const Device = z.object({
   device: z.string().optional().describe("ADB serial or unique model name"),
 });
 
+const ElementTarget = z.union([
+  z.object({ id: z.string().min(1) }).strict(),
+  z.object({ resourceId: z.string().min(1) }).strict(),
+  z.object({ text: z.string().min(1) }).strict(),
+  z.object({ contentDescription: z.string().min(1) }).strict(),
+]);
+
+type AndroidKey = "back" | "home" | "recents" | "power" | "volume-up" | "volume-down" | "enter";
+type PermissionOperation = "grant" | "revoke" | "reset" | "list";
+
+export interface McpActions {
+  tap(x: number, y: number): Promise<void>;
+  swipe(x1: number, y1: number, x2: number, y2: number, durationMs: number): Promise<void>;
+  typeText(value: string): Promise<void>;
+  key(key: AndroidKey): Promise<void>;
+  install(path: string): Promise<void>;
+  launch(packageName: string, activity?: string): Promise<void>;
+  stop(packageName: string): Promise<void>;
+  clear(packageName: string): Promise<void>;
+  uninstall(packageName: string): Promise<void>;
+  deepLink(url: string, packageName?: string): Promise<void>;
+  permission(
+    operation: PermissionOperation,
+    permission: string,
+    packageName: string,
+  ): Promise<string>;
+  push(localPath: string, remoteDirectory: string): Promise<string>;
+}
+
+export interface McpAndroidService {
+  actions: McpActions;
+  logs: { read(since: string): { entries: LogEntry[]; nextCursor: string } };
+  startLogs(): void;
+  stop(): void;
+  observe(logsSince: string): Promise<Omit<Observation, "screenshot">>;
+  screenshot(options: { width?: number; quality?: number }): Promise<Buffer>;
+  tree(): Promise<UiElement[]>;
+}
+
+export interface McpActiveSession {
+  info: SessionInfo;
+  service: McpAndroidService;
+  stop(): Promise<void>;
+}
+
+export interface McpRuntime {
+  listDevices(): Promise<DeviceSummary[]>;
+  service(device?: string): Promise<McpAndroidService>;
+  startSession(device?: string): Promise<McpActiveSession>;
+}
+
 function text(value: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }] };
+}
+
+function elementError(error: unknown) {
+  if (!(error instanceof ServeDroidError)) throw error;
+  return {
+    isError: true,
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({
+          schemaVersion: 1,
+          error: { code: error.code, message: error.message },
+        }),
+      },
+    ],
+  };
 }
 
 async function adb() {
@@ -20,9 +99,34 @@ async function service(device?: string): Promise<AndroidService> {
   return AndroidService.connect(await adb(), device);
 }
 
-export function createMcpServer() {
+function defaultRuntime(): McpRuntime {
+  return {
+    listDevices: async () => listDevices(await adb()),
+    service,
+    startSession: async (device) => {
+      const current = await service(device);
+      const server = new ServeDroidServer(current);
+      return {
+        info: await server.start(),
+        service: current,
+        stop: () => server.stop(),
+      };
+    },
+  };
+}
+
+export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
   const mcp = new McpServer({ name: "serve-droid", version: "0.1.0" });
-  let activeServer: ServeDroidServer | undefined;
+  let activeSession: McpActiveSession | undefined;
+  const selectedService = async (device?: string) => {
+    if (
+      activeSession &&
+      (!device || device.toLowerCase() === activeSession.info.device.serial.toLowerCase())
+    ) {
+      return { current: activeSession.service, temporary: false };
+    }
+    return { current: await runtime.service(device), temporary: true };
+  };
 
   mcp.registerTool(
     "android_list_devices",
@@ -30,7 +134,7 @@ export function createMcpServer() {
       description: "List Android emulators and physical devices visible to ADB.",
       inputSchema: z.object({}),
     },
-    async () => text({ schemaVersion: 1, devices: await listDevices(await adb()) }),
+    async () => text({ schemaVersion: 1, devices: await runtime.listDevices() }),
   );
 
   mcp.registerTool(
@@ -40,10 +144,9 @@ export function createMcpServer() {
       inputSchema: Device,
     },
     async ({ device }) => {
-      if (activeServer) await activeServer.stop();
-      activeServer = new ServeDroidServer(await service(device));
-      const session = await activeServer.start();
-      return text({ ...session, token: undefined });
+      await activeSession?.stop();
+      activeSession = await runtime.startSession(device);
+      return text({ ...activeSession.info, token: undefined });
     },
   );
 
@@ -54,8 +157,8 @@ export function createMcpServer() {
       inputSchema: z.object({}),
     },
     async () => {
-      await activeServer?.stop();
-      activeServer = undefined;
+      await activeSession?.stop();
+      activeSession = undefined;
       return text({ schemaVersion: 1, ok: true });
     },
   );
@@ -68,7 +171,7 @@ export function createMcpServer() {
       inputSchema: Device.extend({ logsSince: z.string().default("0") }),
     },
     async ({ device, logsSince }) => {
-      const current = await service(device);
+      const { current, temporary } = await selectedService(device);
       current.startLogs();
       try {
         const [observation, screenshot] = await Promise.all([
@@ -82,7 +185,7 @@ export function createMcpServer() {
           ],
         };
       } finally {
-        current.stop();
+        if (temporary) current.stop();
       }
     },
   );
@@ -94,8 +197,34 @@ export function createMcpServer() {
       inputSchema: Device.extend({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
     },
     async ({ device, x, y }) => {
-      await (await service(device)).actions.tap(x, y);
+      await (await selectedService(device)).current.actions.tap(x, y);
       return text({ schemaVersion: 1, ok: true });
+    },
+  );
+
+  mcp.registerTool(
+    "android_tap_element",
+    {
+      description:
+        "Tap the center of one uniquely matched semantic element. Fails on missing or ambiguous matches and never guesses coordinates.",
+      inputSchema: Device.extend({ selector: ElementTarget }),
+    },
+    async ({ device, selector }) => {
+      const { current } = await selectedService(device);
+      try {
+        const element = findElement(await current.tree(), selector);
+        const x = (element.bounds.left + element.bounds.right) / 2;
+        const y = (element.bounds.top + element.bounds.bottom) / 2;
+        await current.actions.tap(x, y);
+        return text({
+          schemaVersion: 1,
+          ok: true,
+          elementId: element.id,
+          point: { x, y },
+        });
+      } catch (error) {
+        return elementError(error);
+      }
     },
   );
 
@@ -112,7 +241,7 @@ export function createMcpServer() {
       }),
     },
     async ({ device, x1, y1, x2, y2, durationMs }) => {
-      await (await service(device)).actions.swipe(x1, y1, x2, y2, durationMs);
+      await (await selectedService(device)).current.actions.swipe(x1, y1, x2, y2, durationMs);
       return text({ schemaVersion: 1, ok: true });
     },
   );
@@ -124,7 +253,7 @@ export function createMcpServer() {
       inputSchema: Device.extend({ text: z.string().min(1) }),
     },
     async ({ device, text: value }) => {
-      await (await service(device)).actions.typeText(value);
+      await (await selectedService(device)).current.actions.typeText(value);
       return text({ schemaVersion: 1, ok: true });
     },
   );
@@ -138,7 +267,7 @@ export function createMcpServer() {
       }),
     },
     async ({ device, key }) => {
-      await (await service(device)).actions.key(key);
+      await (await selectedService(device)).current.actions.key(key);
       return text({ schemaVersion: 1, ok: true });
     },
   );
@@ -157,7 +286,7 @@ export function createMcpServer() {
       }),
     },
     async ({ device, operation, packageName = "", path = "", activity, url = "", confirm }) => {
-      const actions = (await service(device)).actions;
+      const actions = (await selectedService(device)).current.actions;
       if ((operation === "clear" || operation === "uninstall") && !confirm) {
         throw new Error(`${operation} requires confirm=true.`);
       }
@@ -193,8 +322,8 @@ export function createMcpServer() {
       text({
         schemaVersion: 1,
         output: await (
-          await service(device)
-        ).actions.permission(operation, permission, packageName),
+          await selectedService(device)
+        ).current.actions.permission(operation, permission, packageName),
       }),
   );
 
@@ -210,7 +339,9 @@ export function createMcpServer() {
     async ({ device, localPath, remoteDirectory }) =>
       text({
         schemaVersion: 1,
-        destination: await (await service(device)).actions.push(localPath, remoteDirectory),
+        destination: await (
+          await selectedService(device)
+        ).current.actions.push(localPath, remoteDirectory),
       }),
   );
 
@@ -225,7 +356,7 @@ export function createMcpServer() {
       Promise.resolve(
         text({
           schemaVersion: 1,
-          ...(activeServer?.service.logs.read(since) ?? { entries: [], nextCursor: since }),
+          ...(activeSession?.service.logs.read(since) ?? { entries: [], nextCursor: since }),
         }),
       ),
   );

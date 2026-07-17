@@ -28,7 +28,12 @@ export default tseslint.config(
     rules: { "@typescript-eslint/no-unused-vars": ["error", { varsIgnorePattern: "^React$" }] },
   },
   {
-    files: ["packages/core/test/**/*.ts", "packages/server/test/**/*.ts", "scripts/**/*.mjs"],
+    files: [
+      "packages/core/test/**/*.ts",
+      "packages/mcp/test/**/*.ts",
+      "packages/server/test/**/*.ts",
+      "scripts/**/*.mjs",
+    ],
     ...tseslint.configs.disableTypeChecked,
   },
   {

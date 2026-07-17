@@ -28,6 +28,7 @@ Always surface the returned browser URL. Use `--device <serial>` when multiple d
 - Coordinates are normalized `0..1`, logical top-left origin.
 - Use semantic elements before coordinates.
 - If an element query returns zero or multiple matches, stop and report it. Never guess.
+- In MCP clients, use `android_tap_element` with exactly one exact selector after observing.
 - Use `tap` for taps and one `swipe` or gesture transaction for motion.
 - Use `--json`; never parse human output.
 - `clear` and `uninstall` are destructive and require explicit confirmation.
