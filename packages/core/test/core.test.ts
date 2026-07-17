@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   AndroidActions,
   ServeDroidError,
+  errorExitCode,
   findElement,
   parseDeviceList,
   parseDisplayInfo,
@@ -161,5 +162,11 @@ describe("actions", () => {
     }));
     await expect(actions.tap(1.1, 0)).rejects.toBeInstanceOf(ServeDroidError);
     expect(adb.calls).toHaveLength(0);
+  });
+});
+
+describe("public errors", () => {
+  it("assigns a stable exit status to occupied ports", () => {
+    expect(errorExitCode(new ServeDroidError("PORT_IN_USE", "occupied"))).toBe(31);
   });
 });

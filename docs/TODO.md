@@ -36,7 +36,7 @@ because its code path compiles.
 - [x] Select by serial, exact name, or unique case-insensitive name and reject ambiguity.
 - [x] Provide machine-readable and human-readable doctor output.
 - [x] Link to official Platform Tools setup without downloading ADB.
-- [ ] Add explicit occupied-port diagnosis before attempting a fixed port.
+- [x] Diagnose occupied fixed ports before device startup and expose a typed `PORT_IN_USE` error.
 - [ ] Add browser capability probing to `doctor`.
 - [ ] Verify unauthorized and offline recovery with real devices.
 - [ ] Verify Wi-Fi pairing and document observed OEM-specific behavior.

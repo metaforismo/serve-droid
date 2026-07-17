@@ -7,6 +7,7 @@ import {
   type DeviceSummary,
   type SessionInfo,
 } from "@serve-droid/core";
+import { listenHttpServer } from "./listen.js";
 
 export const MAX_GRID_DEVICES = 8;
 
@@ -229,10 +230,7 @@ export class GridDashboard {
   }
 
   public async start(): Promise<string> {
-    await new Promise<void>((resolvePromise, reject) => {
-      this.#http.once("error", reject);
-      this.#http.listen(this.port, "127.0.0.1", resolvePromise);
-    });
+    await listenHttpServer(this.#http, this.port, "127.0.0.1");
     this.#url = `http://127.0.0.1:${(this.#http.address() as AddressInfo).port}`;
     return this.#url;
   }

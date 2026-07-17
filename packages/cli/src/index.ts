@@ -26,6 +26,7 @@ import {
   removeRecording,
   removeSessionState,
   ServeDroidServer,
+  assertPortAvailable,
   resolveCloudflaredPath,
 } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
@@ -74,7 +75,9 @@ const program = addGlobal(new Command())
 program
   .command("doctor")
   .description("Check Node, ADB, devices, authorization, and Android API support.")
-  .action(async (_options, command) => {
+  .option("--host <host>", "host used by the fixed-port probe", "127.0.0.1")
+  .option("--port <port>", "fixed listen port to probe", (value) => Number.parseInt(value, 10), 0)
+  .action(async (local, command) => {
     const options = globalOptions(command);
     const checks: Array<{ name: string; ok: boolean; message: string }> = [];
     checks.push({
@@ -82,6 +85,24 @@ program
       ok: Number(process.versions.node.split(".")[0]) >= 22,
       message: `Node ${process.versions.node}`,
     });
+    if (local.port === 0) {
+      checks.push({ name: "port", ok: true, message: "ephemeral port allocation enabled" });
+    } else {
+      try {
+        await assertPortAvailable(local.host, local.port);
+        checks.push({
+          name: "port",
+          ok: true,
+          message: `${local.host}:${local.port} is available`,
+        });
+      } catch (error) {
+        checks.push({
+          name: "port",
+          ok: false,
+          message: error instanceof Error ? error.message : "Port probe failed.",
+        });
+      }
+    }
     try {
       const adbPath = await resolveAdbPath();
       checks.push({ name: "adb", ok: true, message: adbPath });
@@ -226,6 +247,7 @@ program
   .option("--child", "internal detached child mode")
   .action(async (device, local, command) => {
     const options = { ...globalOptions(command), device: device ?? globalOptions(command).device };
+    await assertPortAvailable(local.host, local.port);
     if (local.detach && !local.child) {
       const args = [
         process.argv[1]!,

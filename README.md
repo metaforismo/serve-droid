@@ -38,6 +38,14 @@ npx serve-droid start --detach
 npx serve-droid list --json
 ```
 
+When selecting a fixed port, probe it before touching the device. Occupied ports return the stable
+`PORT_IN_USE` code and exit status `31`; `--port 0` keeps safe ephemeral allocation.
+
+```bash
+npx serve-droid doctor --port 47321 --json
+npx serve-droid start --port 47321
+```
+
 Device playback audio is opt-in and browser playback remains muted until a human enables it:
 
 ```bash

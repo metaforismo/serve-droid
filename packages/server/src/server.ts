@@ -20,6 +20,7 @@ import { ScrcpyH264Source, type AudioState, type VideoSource } from "./video.js"
 import { removeSessionState, writeSessionState } from "./state.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 import type { TunnelStatus } from "./tunnel.js";
+import { listenHttpServer } from "./listen.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -247,10 +248,7 @@ export class ServeDroidServer {
 
   public async start(): Promise<SessionInfo> {
     if (this.#session) return this.#session;
-    await new Promise<void>((resolvePromise, reject) => {
-      this.#http.once("error", reject);
-      this.#http.listen(this.#requestedPort, this.#host, () => resolvePromise());
-    });
+    await listenHttpServer(this.#http, this.#requestedPort, this.#host);
     const address = this.#http.address() as AddressInfo;
     const display = await getDisplayInfo(this.service.adb, this.service.device.serial);
     const shownHost = this.#host === "0.0.0.0" ? "127.0.0.1" : this.#host;
