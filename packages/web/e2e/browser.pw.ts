@@ -17,6 +17,16 @@ let fixtureDirectory = "";
 let baselineSample: number[] = [];
 let performancePackets: number[][] = [];
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "__SERVE_DROID_BOOTSTRAP__", {
+      configurable: true,
+      writable: true,
+      value: { token: "browser-test-token" },
+    });
+  });
+});
+
 function splitAccessUnits(data: Uint8Array): number[][] {
   const starts: number[] = [0];
   for (let index = 0; index < data.length - 4; index += 1) {
@@ -93,14 +103,43 @@ test("selects an available video decoder without disabling the cockpit", async (
   await expect(page.getByRole("button", { name: /UI tree/u })).toBeEnabled();
 });
 
+test("accepts a LAN token through the URL fragment and removes it from history", async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.addInitScript(() => {
+    Object.defineProperty(globalThis, "__SERVE_DROID_BOOTSTRAP__", {
+      configurable: true,
+      writable: true,
+      value: { token: "" },
+    });
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Enter the session token" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Session token" }).fill("shared-lan-token");
+  await page.getByRole("button", { name: "Connect to device" }).click();
+  await expect(page.locator(".topbar")).toContainText("serve-droid");
+  await expect(page).not.toHaveURL(/token=/u);
+  await context.close();
+});
+
 test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page }) => {
   let releaseFollowup = false;
   let followupDelivered = false;
+  const actions: Array<Record<string, unknown>> = [];
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: { writeText: () => Promise.resolve() },
+      value: {
+        readText: () => Promise.resolve("hello device"),
+        writeText: () => Promise.resolve(),
+      },
     });
+  });
+  await page.route("**/api/v1/actions", async (route) => {
+    actions.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) });
   });
   await page.route("**/api/v1/remote-access", async (route) =>
     route.fulfill({
@@ -195,6 +234,13 @@ test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page
   await expect(page.getByText("Second crash captured while paused", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear Logcat" }).click();
   await expect(page.getByText("Waiting for app logs.", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Open device clipboard" }).click();
+  await page.getByRole("button", { name: "Load browser clipboard" }).click();
+  await expect(page.getByLabel("Text to paste into device")).toHaveValue("hello device");
+  await page.getByRole("button", { name: "Send to focused field" }).click();
+  await expect.poll(() => actions).toContainEqual({ type: "type", text: "hello device" });
+  await expect(page.getByText("12 characters sent", { exact: true })).toBeVisible();
 });
 
 test("falls back to TinyH264 when WebCodecs is unavailable", async ({ page }) => {

@@ -58,6 +58,8 @@ try {
   await page.getByText("Demo preview", { exact: true }).waitFor();
   await page.locator(".phone img").waitFor();
   await page.getByText("Session attached to Pixel 9 Pro", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "Open device clipboard" }).click();
+  await page.getByLabel("Text to paste into device").fill("hello from the browser cockpit");
   await page.screenshot({ path: output, type: "jpeg", quality: 88 });
   process.stdout.write(`Updated ${output}\n`);
 } finally {
