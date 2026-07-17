@@ -30,13 +30,21 @@ export interface LogEntry {
 }
 
 export interface Observation {
+  schemaVersion: 1;
   timestamp: string;
   device: { serial: string; model: string | null; apiLevel: number | null; kind: string };
   display: { width: number; height: number; orientation: string };
   foregroundApp: { packageName: string | null; activity: string | null };
+  screenshot: { mimeType: "image/jpeg"; width: number; height: number; url: string };
   elements: UiElement[];
   logs: LogEntry[];
   nextLogCursor: string;
+}
+
+export async function screenshot(url: string): Promise<Blob> {
+  const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error(`Screenshot request failed (${response.status})`);
+  return response.blob();
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
