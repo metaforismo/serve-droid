@@ -68,7 +68,7 @@ function errorBody(error: unknown) {
     schemaVersion: SCHEMA_VERSION,
     error: {
       code: "INTERNAL_ERROR",
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: "The request could not be completed.",
     },
   };
 }

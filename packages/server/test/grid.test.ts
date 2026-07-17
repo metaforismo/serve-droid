@@ -64,7 +64,7 @@ describe("multi-device grid", () => {
     expect(snapshot.sessions[0]).not.toHaveProperty("token");
     expect(snapshot.failures).toEqual([
       { serial: "offline", message: "Device is offline." },
-      { serial: "broken", message: "helper failed" },
+      { serial: "broken", message: "Device session failed." },
     ]);
     expect(coordinator.takeOver("good").activeSerial).toBe("good");
     expect(() => coordinator.takeOver("missing")).toThrow(ServeDroidError);
@@ -139,7 +139,7 @@ describe("multi-device grid", () => {
     await coordinator.start();
     const failed = await coordinator.reconcile(1_000);
     expect(failed.sessions).toEqual([]);
-    expect(failed.failures[0]?.message).toContain("Reconnect failed");
+    expect(failed.failures[0]?.message).toBe("Reconnect failed: device session unavailable.");
     await coordinator.reconcile(5_999);
     expect(attempts).toBe(2);
     const recovered = await coordinator.reconcile(6_000);

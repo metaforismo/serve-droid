@@ -75,7 +75,7 @@ export class GridCoordinator {
       try {
         this.#children.push(await this.createChild(device));
       } catch (error) {
-        this.#setFailure(device.serial, error instanceof Error ? error.message : String(error));
+        this.#setFailure(device.serial, publicFailureMessage(error, "Device session failed."));
         this.#retryAfter.set(device.serial, Date.now() + 5_000);
       }
     }
@@ -144,7 +144,7 @@ export class GridCoordinator {
       } catch (error) {
         this.#setFailure(
           device.serial,
-          `Reconnect failed: ${error instanceof Error ? error.message : String(error)}`,
+          `Reconnect failed: ${publicFailureMessage(error, "device session unavailable.")}`,
         );
         this.#retryAfter.set(device.serial, now + 5_000);
       }
@@ -174,6 +174,10 @@ export class GridCoordinator {
     const index = this.#failures.findIndex((failure) => failure.serial === serial);
     if (index >= 0) this.#failures.splice(index, 1);
   }
+}
+
+function publicFailureMessage(error: unknown, fallback: string): string {
+  return error instanceof ServeDroidError ? error.message : fallback;
 }
 
 function safeEqual(left: string, right: string): boolean {
@@ -275,13 +279,20 @@ export class GridDashboard {
         });
       }
     } catch (error) {
-      sendJson(response, 400, {
-        schemaVersion: SCHEMA_VERSION,
-        error: {
-          code: error instanceof ServeDroidError ? error.code : "INTERNAL_ERROR",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      });
+      if (error instanceof ServeDroidError) {
+        sendJson(response, 400, {
+          schemaVersion: SCHEMA_VERSION,
+          error: { code: error.code, message: error.message },
+        });
+      } else {
+        sendJson(response, 500, {
+          schemaVersion: SCHEMA_VERSION,
+          error: {
+            code: "INTERNAL_ERROR",
+            message: "The grid request could not be completed.",
+          },
+        });
+      }
     }
   }
 
