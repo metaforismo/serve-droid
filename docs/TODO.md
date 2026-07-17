@@ -138,7 +138,8 @@ because its code path compiles.
 - [x] Enforce recording byte/time limits with explicit verified cleanup.
 - [x] Recover partial manifests only when their owning process is dead.
 - [ ] Rich trace export and browser recording controls.
-- [ ] Authenticated tunnels and collaboration roles.
+- [x] Expiring foreground named tunnels with explicit consent, revocation, and visible state.
+- [ ] Multi-user collaboration roles.
 - [x] Discover installed AVDs independently and provide explicit start/stop lifecycle controls.
 - [x] Detect missing AVD system images without downloading content or accepting licenses.
 - [x] Exercise AVD discovery/start validation across the macOS, Linux, and Windows CI matrix.

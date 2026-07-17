@@ -20,3 +20,5 @@ serve-droid/session-*.json
 recordings/
 screenshots/
 work/
+.cloudflared/
+tunnel-credentials*.json

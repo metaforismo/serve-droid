@@ -19,6 +19,7 @@ import {
 import { ScrcpyH264Source, type AudioState, type VideoSource } from "./video.js";
 import { removeSessionState, writeSessionState } from "./state.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
+import type { TunnelStatus } from "./tunnel.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -126,6 +127,12 @@ export class ServeDroidServer {
   #recorder: SessionRecorder | undefined;
   #session: SessionInfo | undefined;
   #audioState: AudioState;
+  #remoteAccess: TunnelStatus = {
+    active: false,
+    provider: null,
+    publicUrl: null,
+    expiresAt: null,
+  };
   #stopping = false;
 
   public constructor(
@@ -349,6 +356,10 @@ export class ServeDroidServer {
           schemaVersion: SCHEMA_VERSION,
           recording: this.recording,
         });
+      } else if (url.pathname === "/api/v1/remote-access" && request.method === "GET") {
+        json(response, 200, { schemaVersion: SCHEMA_VERSION, ...this.#remoteAccess });
+      } else if (url.pathname === "/api/v1/remote-access" && request.method === "POST") {
+        json(response, 200, this.#setRemoteAccess(await readJson(request)));
       } else if (url.pathname === "/api/v1/logs" && request.method === "GET") {
         this.#serveLogs(request, response, url.searchParams.get("since") ?? "0");
       } else if (url.pathname === "/api/v1/actions" && request.method === "POST") {
@@ -368,6 +379,46 @@ export class ServeDroidServer {
     } catch (error) {
       json(response, error instanceof ServeDroidError ? 400 : 500, errorBody(error));
     }
+  }
+
+  #setRemoteAccess(body: Record<string, unknown>): { schemaVersion: 1 } & TunnelStatus {
+    if (body.active === false) {
+      this.#remoteAccess = { active: false, provider: null, publicUrl: null, expiresAt: null };
+      return { schemaVersion: SCHEMA_VERSION, ...this.#remoteAccess };
+    }
+    if (body.active !== true || body.provider !== "cloudflare") {
+      throw new ServeDroidError("INVALID_ARGUMENT", "Remote access state is malformed.");
+    }
+    const publicUrl = typeof body.publicUrl === "string" ? body.publicUrl : "";
+    let url: URL;
+    try {
+      url = new URL(publicUrl);
+    } catch {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Remote access requires an exact HTTPS origin.",
+      );
+    }
+    if (url.protocol !== "https:" || url.origin !== publicUrl) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Remote access requires an exact HTTPS origin.",
+      );
+    }
+    const expiresAt = typeof body.expiresAt === "string" ? body.expiresAt : "";
+    const expiry = Date.parse(expiresAt);
+    if (
+      !Number.isFinite(expiry) ||
+      expiry <= Date.now() ||
+      expiry > Date.now() + 2 * 60 * 60 * 1000
+    ) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Remote access expiry is outside the allowed window.",
+      );
+    }
+    this.#remoteAccess = { active: true, provider: "cloudflare", publicUrl, expiresAt };
+    return { schemaVersion: SCHEMA_VERSION, ...this.#remoteAccess };
   }
 
   async #serveIndex(request: IncomingMessage, response: ServerResponse): Promise<void> {

@@ -18,11 +18,13 @@ import {
   startAvd,
 } from "@serve-droid/core";
 import {
+  NamedCloudflareTunnel,
   readSessionStates,
   recoverPartialRecordings,
   removeRecording,
   removeSessionState,
   ServeDroidServer,
+  resolveCloudflaredPath,
 } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
 
@@ -299,6 +301,67 @@ program
     const stop = () => void server.stop().finally(() => process.exit());
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
+  });
+
+const tunnel = program
+  .command("tunnel")
+  .description("Create explicitly authorized, expiring remote access for a live session.");
+
+tunnel
+  .command("start [device]")
+  .description("Run a preconfigured named Cloudflare Tunnel in the foreground.")
+  .requiredOption("--tunnel <name>", "existing named Cloudflare tunnel")
+  .requiredOption("--credentials-file <path>", "tunnel-specific credentials JSON")
+  .requiredOption("--public-url <https-origin>", "preconfigured public HTTPS origin")
+  .option(
+    "--expires-minutes <minutes>",
+    "hard lifetime from 1 to 120 minutes",
+    (value) => Number.parseInt(value, 10),
+    30,
+  )
+  .option("--cloudflared <path>", "explicit cloudflared executable")
+  .option("--yes", "confirm public remote access")
+  .action(async (device, local, command) => {
+    const options = globalOptions(command);
+    if (!local.yes) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Remote access publishes the selected session; rerun with --yes after reviewing docs/tunnels.md.",
+      );
+    }
+    const matches = (await readSessionStates()).filter(
+      (session) =>
+        !device ||
+        session.device.serial === device ||
+        session.device.model?.toLowerCase() === String(device).toLowerCase(),
+    );
+    if (matches.length !== 1) {
+      throw new ServeDroidError(
+        matches.length ? "DEVICE_AMBIGUOUS" : "SESSION_NOT_FOUND",
+        matches.length
+          ? "Tunnel device selection is ambiguous."
+          : "No matching live session exists.",
+      );
+    }
+    const session = matches[0]!;
+    const manager = new NamedCloudflareTunnel({
+      executable: await resolveCloudflaredPath(local.cloudflared),
+      tunnel: local.tunnel,
+      credentialsFile: resolve(local.credentialsFile),
+      publicUrl: local.publicUrl,
+      durationMs: Number(local.expiresMinutes) * 60_000,
+      session,
+    });
+    const stop = () => void manager.stop().finally(() => process.exit());
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
+    const status = await manager.start();
+    output(
+      { schemaVersion: SCHEMA_VERSION, ...status, sessionUrl: session.url },
+      options,
+      `Remote access active until ${status.expiresAt}\nOpen: ${status.publicUrl}/#token=${session.token}\nCtrl-C revokes the connector immediately.`,
+    );
+    await new Promise<void>((resolvePromise) => manager.once("close", () => resolvePromise()));
   });
 
 program.action(async () => {

@@ -1,6 +1,7 @@
 export type ErrorCode =
   | "ADB_NOT_FOUND"
   | "ADB_FAILED"
+  | "CLOUDFLARED_NOT_FOUND"
   | "EMULATOR_NOT_FOUND"
   | "EMULATOR_FAILED"
   | "AVD_NOT_FOUND"
@@ -32,7 +33,7 @@ export class ServeDroidError extends Error {
 
 export function errorExitCode(error: unknown): number {
   if (!(error instanceof ServeDroidError)) return 1;
-  if (error.code === "ADB_NOT_FOUND") return 10;
+  if (error.code === "ADB_NOT_FOUND" || error.code === "CLOUDFLARED_NOT_FOUND") return 10;
   if (error.code.startsWith("EMULATOR_") || error.code.startsWith("AVD_")) return 11;
   if (error.code.startsWith("DEVICE_") || error.code === "UNSUPPORTED_ANDROID") return 20;
   if (error.code === "INVALID_ARGUMENT") return 30;

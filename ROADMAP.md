@@ -12,7 +12,8 @@
 - Safari/Firefox decoder performance hardening. The TinyH264 compatibility path is available now.
 - Rich trace export and browser recording controls. Bounded CLI opt-in H.264/event recording is
   available now.
-- Explicit authenticated tunnels and collaboration roles.
+- Named authenticated tunnel hardening and collaboration roles. Expiring foreground tunnel support
+  is available now.
 - AVD creation/provisioning and a multi-device grid. Installed AVD discovery and explicit
   start/stop lifecycle controls are available now.
 
