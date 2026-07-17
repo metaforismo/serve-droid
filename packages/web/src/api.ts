@@ -77,14 +77,61 @@ export async function action(body: Record<string, unknown>): Promise<void> {
   await api("/api/v1/actions", { method: "POST", body: JSON.stringify(body) });
 }
 
-export async function upload(file: File): Promise<void> {
-  await api("/api/v1/files", {
-    method: "POST",
-    headers: {
-      "x-file-name": encodeURIComponent(file.name),
-      "content-type": "application/octet-stream",
-    },
-    body: file,
+export interface UploadProgress {
+  phase: "uploading" | "processing";
+  loaded: number;
+  total: number;
+  percent: number;
+}
+
+export interface UploadResult {
+  schemaVersion: 1;
+  ok: true;
+  operation: "install" | "push";
+  destination?: string;
+}
+
+export function upload(
+  file: File,
+  onProgress: (progress: UploadProgress) => void = () => undefined,
+): Promise<UploadResult> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/v1/files");
+    request.setRequestHeader("authorization", `Bearer ${token}`);
+    request.setRequestHeader("content-type", "application/octet-stream");
+    request.setRequestHeader("x-file-name", encodeURIComponent(file.name));
+    request.upload.addEventListener("progress", (event) => {
+      const total = event.lengthComputable && event.total > 0 ? event.total : file.size;
+      const loaded = Math.min(event.loaded, total);
+      onProgress({
+        phase: total > 0 && loaded >= total ? "processing" : "uploading",
+        loaded,
+        total,
+        percent: total > 0 ? Math.round((loaded / total) * 100) : 0,
+      });
+    });
+    request.upload.addEventListener("load", () => {
+      onProgress({ phase: "processing", loaded: file.size, total: file.size, percent: 100 });
+    });
+    request.addEventListener("load", () => {
+      let body: UploadResult & { error?: { message: string } };
+      try {
+        body = JSON.parse(request.responseText) as typeof body;
+      } catch {
+        reject(new Error(`Upload returned an invalid response (${request.status})`));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(body.error?.message ?? `Upload failed (${request.status})`));
+        return;
+      }
+      resolve(body);
+    });
+    request.addEventListener("error", () => reject(new Error("Upload connection failed.")));
+    request.addEventListener("abort", () => reject(new Error("Upload was cancelled.")));
+    onProgress({ phase: "uploading", loaded: 0, total: file.size, percent: 0 });
+    request.send(file);
   });
 }
 

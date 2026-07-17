@@ -98,7 +98,7 @@ because its code path compiles.
 - [x] Add a LAN token-entry screen and document fragment-based handoff.
 - [x] Add priority and combined tag/message Logcat filters plus pause/clear/copy controls.
 - [x] Add clipboard UI with manual entry and browser Clipboard API loading.
-- [ ] Add file-transfer progress events.
+- [x] Add byte-accurate browser upload progress with a separate Android install/push phase.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 
 ## CLI, HTTP, MCP, and Agent Skill

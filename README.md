@@ -24,6 +24,7 @@ is tracked separately in the release checklist._
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
 - Secure LAN token entry and bounded clipboard paste into the focused Android field.
+- Drag and drop APK or file transfer with byte progress and an explicit Android processing phase.
 - One bounded observation containing the screen, UI hierarchy, foreground app, device state, and
   incremental logs.
 - The same capabilities through CLI, authenticated HTTP/WebSocket APIs, MCP, and an Agent Skill.

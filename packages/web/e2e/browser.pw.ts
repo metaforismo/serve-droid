@@ -136,6 +136,35 @@ test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page
         writeText: () => Promise.resolve(),
       },
     });
+    class TestXMLHttpRequest extends EventTarget {
+      public readonly upload = new EventTarget();
+      public status = 0;
+      public responseText = "";
+      public open(): void {}
+      public setRequestHeader(): void {}
+      public send(body?: Document | XMLHttpRequestBodyInit | null): void {
+        const total = body instanceof Blob ? body.size : 0;
+        window.setTimeout(() => {
+          this.upload.dispatchEvent(
+            new ProgressEvent("progress", {
+              lengthComputable: true,
+              loaded: total,
+              total,
+            }),
+          );
+          this.upload.dispatchEvent(new Event("load"));
+        }, 50);
+        window.setTimeout(() => {
+          this.status = 200;
+          this.responseText = JSON.stringify({ schemaVersion: 1, ok: true, operation: "install" });
+          this.dispatchEvent(new Event("load"));
+        }, 1_000);
+      }
+    }
+    Object.defineProperty(globalThis, "XMLHttpRequest", {
+      configurable: true,
+      value: TestXMLHttpRequest,
+    });
   });
   await page.route("**/api/v1/actions", async (route) => {
     actions.push(route.request().postDataJSON() as Record<string, unknown>);
@@ -241,6 +270,21 @@ test("filters, pauses, copies, and clears bounded Logcat entries", async ({ page
   await page.getByRole("button", { name: "Send to focused field" }).click();
   await expect.poll(() => actions).toContainEqual({ type: "type", text: "hello device" });
   await expect(page.getByText("12 characters sent", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Choose APK or file").setInputFiles({
+    name: "fixture.apk",
+    mimeType: "application/vnd.android.package-archive",
+    buffer: Buffer.alloc(32 * 1024),
+  });
+  const transfer = page.getByRole("status").filter({ hasText: "Installing fixture.apk on device" });
+  await expect(transfer).toContainText("Finishing with ADB");
+  await expect(page.getByLabel("Transfer progress for fixture.apk")).toHaveAttribute(
+    "value",
+    "100",
+  );
+  await expect(page.getByRole("status").filter({ hasText: "Installed fixture.apk" })).toContainText(
+    "Done",
+  );
 });
 
 test("falls back to TinyH264 when WebCodecs is unavailable", async ({ page }) => {

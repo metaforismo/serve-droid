@@ -14,4 +14,7 @@ Browser WebSockets pass `serve-droid, token.<base64url-token>` in `Sec-WebSocket
 Credentials never appear in URL query parameters.
 
 Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to
-`/sdcard/Download`. The limit is 256 MiB.
+`/sdcard/Download`. The limit is 256 MiB. Browser clients report byte-accurate request upload
+progress, then switch to a distinct indeterminate install or push phase while waiting for ADB. The
+server does not invent a percentage for Android-side work. Successful responses identify the
+`install` or `push` operation and include the remote destination for pushed files.
