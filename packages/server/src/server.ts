@@ -395,7 +395,18 @@ export class ServeDroidServer {
       } else if (url.pathname === "/api/v1/remote-access" && request.method === "POST") {
         json(response, 200, this.#setRemoteAccess(await readJson(request)));
       } else if (url.pathname === "/api/v1/logs" && request.method === "GET") {
-        this.#serveLogs(request, response, url.searchParams.get("since") ?? "0");
+        const requestedPackage = url.searchParams.get("package") || undefined;
+        const systemLogs = url.searchParams.get("system") === "true";
+        if (requestedPackage && systemLogs) {
+          throw new ServeDroidError(
+            "INVALID_ARGUMENT",
+            "Choose either a package filter or system logs, not both.",
+          );
+        }
+        const packageName = systemLogs
+          ? undefined
+          : requestedPackage || (await this.service.foreground()).packageName || undefined;
+        await this.#serveLogs(request, response, url.searchParams.get("since") ?? "0", packageName);
       } else if (url.pathname === "/api/v1/actions" && request.method === "POST") {
         json(response, 200, await this.#action(await readJson(request)));
       } else if (url.pathname === "/api/v1/apps" && request.method === "POST") {
@@ -498,16 +509,22 @@ export class ServeDroidServer {
     createReadStream(path).pipe(response);
   }
 
-  #serveLogs(request: IncomingMessage, response: ServerResponse, since: string): void {
+  async #serveLogs(
+    request: IncomingMessage,
+    response: ServerResponse,
+    since: string,
+    packageName?: string,
+  ): Promise<void> {
+    const initial = await this.service.readLogs(since, packageName);
     response.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-store",
       connection: "keep-alive",
     });
     const write = (entry: unknown) => response.write(`data: ${JSON.stringify(entry)}\n\n`);
-    for (const entry of this.service.logs.read(since).entries) write(entry);
-    this.service.logs.on("entry", write);
-    request.once("close", () => this.service.logs.off("entry", write));
+    for (const entry of initial.entries) write(entry);
+    const unsubscribe = this.service.subscribeLogs(packageName, write);
+    request.once("close", unsubscribe);
   }
 
   async #action(body: Record<string, unknown>): Promise<unknown> {

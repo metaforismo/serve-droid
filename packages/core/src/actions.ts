@@ -39,11 +39,19 @@ const PERMISSIONS: Record<string, string> = {
   calendar: "android.permission.READ_CALENDAR",
 };
 
+export interface AndroidActionHooks {
+  onPackageProcessChanged?: (
+    packageName: string,
+    state: "started" | "stopped",
+  ) => void | Promise<void>;
+}
+
 export class AndroidActions {
   public constructor(
     private readonly adb: AdbRunner,
     public readonly serial: string,
     private readonly getDisplay: () => Promise<DisplayInfo>,
+    private readonly hooks: AndroidActionHooks = {},
   ) {}
 
   public async tap(x: number, y: number): Promise<void> {
@@ -165,24 +173,29 @@ export class AndroidActions {
       ? ["shell", "am", "start", "-n", `${packageName}/${activity}`]
       : ["shell", "monkey", "-p", packageName, "-c", "android.intent.category.LAUNCHER", "1"];
     await checkedRun(this.adb, args, { serial: this.serial });
+    await this.hooks.onPackageProcessChanged?.(packageName, "started");
   }
 
   public async stop(packageName: string): Promise<void> {
     await checkedRun(this.adb, ["shell", "am", "force-stop", packageName], { serial: this.serial });
+    await this.hooks.onPackageProcessChanged?.(packageName, "stopped");
   }
 
   public async clear(packageName: string): Promise<void> {
     await checkedRun(this.adb, ["shell", "pm", "clear", packageName], { serial: this.serial });
+    await this.hooks.onPackageProcessChanged?.(packageName, "stopped");
   }
 
   public async uninstall(packageName: string): Promise<void> {
     await checkedRun(this.adb, ["uninstall", packageName], { serial: this.serial });
+    await this.hooks.onPackageProcessChanged?.(packageName, "stopped");
   }
 
   public async deepLink(url: string, packageName?: string): Promise<void> {
     const args = ["shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url];
     if (packageName) args.push(packageName);
     await checkedRun(this.adb, args, { serial: this.serial });
+    if (packageName) await this.hooks.onPackageProcessChanged?.(packageName, "started");
   }
 
   public async push(localPath: string, remoteDirectory = "/sdcard/Download/"): Promise<string> {

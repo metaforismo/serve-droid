@@ -55,6 +55,7 @@ interface Fixture {
   elements: UiElement[];
   serviceCalls: { value: number };
   serviceStops: { value: number };
+  logCalls: Array<{ since: string; packageName?: string }>;
   stopped: { value: boolean };
 }
 
@@ -88,10 +89,12 @@ function fixture(): Fixture {
   const elements = [element];
   const serviceCalls = { value: 0 };
   const serviceStops = { value: 0 };
+  const logCalls: Array<{ since: string; packageName?: string }> = [];
   const current: McpAndroidService = {
     actions,
-    logs: {
-      read: (since) => ({
+    readLogs: async (since, packageName) => {
+      logCalls.push({ since, packageName });
+      return {
         entries: [
           {
             cursor: "8",
@@ -104,12 +107,17 @@ function fixture(): Fixture {
           },
         ],
         nextCursor: "8",
-      }),
+      };
     },
     startLogs: () => undefined,
     stop: () => {
       serviceStops.value += 1;
     },
+    foreground: async () => ({
+      packageName: "dev.servedroid.fixture",
+      activity: ".MainActivity",
+      pid: 123,
+    }),
     observe: async (logsSince) => ({
       schemaVersion: 1,
       timestamp: "2026-07-17T00:00:00.000Z",
@@ -133,6 +141,7 @@ function fixture(): Fixture {
     elements,
     serviceCalls,
     serviceStops,
+    logCalls,
     stopped,
     runtime: {
       listDevices: async () => [device],
@@ -224,6 +233,7 @@ describe("MCP contracts", () => {
     expect(state.actionCalls).toContainEqual({ name: "tap", args: [0.5, 0.5] });
     expect(state.serviceCalls.value).toBe(0);
     expect(state.serviceStops.value).toBe(0);
+    expect(state.logCalls).toEqual([{ since: "7", packageName: "dev.servedroid.fixture" }]);
     expect(state.stopped.value).toBe(true);
   });
 

@@ -108,12 +108,22 @@ function scanComponent(value: string): { packageName: string; activity: string }
 export class AndroidService {
   public readonly logs = new LogBuffer();
   public readonly actions: AndroidActions;
+  readonly #packagePids = new Map<string, number | null>();
+  readonly #packagePidRefreshes = new Map<string, Promise<number | null>>();
 
   public constructor(
     public readonly adb: AdbRunner,
     public readonly device: DeviceSummary,
   ) {
-    this.actions = new AndroidActions(adb, device.serial, () => getDisplayInfo(adb, device.serial));
+    this.actions = new AndroidActions(
+      adb,
+      device.serial,
+      () => getDisplayInfo(adb, device.serial),
+      {
+        onPackageProcessChanged: (packageName, state) =>
+          this.#packageProcessChanged(packageName, state),
+      },
+    );
   }
 
   public static async connect(adb: AdbRunner, selector?: string): Promise<AndroidService> {
@@ -126,6 +136,77 @@ export class AndroidService {
 
   public stop(): void {
     this.logs.stop();
+  }
+
+  async #packageProcessChanged(packageName: string, state: "started" | "stopped"): Promise<void> {
+    if (!this.#packagePids.has(packageName)) return;
+    const active = this.#packagePidRefreshes.get(packageName);
+    if (state === "stopped") {
+      await active;
+      this.#packagePids.set(packageName, null);
+      return;
+    }
+    this.#packagePids.set(packageName, null);
+    await this.#packagePid(packageName, true);
+  }
+
+  async #packagePid(packageName: string, force = false): Promise<number | null> {
+    const cached = this.#packagePids.get(packageName);
+    if (!force && cached) return cached;
+    const active = this.#packagePidRefreshes.get(packageName);
+    if (active) {
+      return force ? active.then(() => this.#packagePid(packageName, true)) : active;
+    }
+    const refresh = this.adb
+      .run(["shell", "pidof", packageName], { serial: this.device.serial })
+      .then((result) => {
+        const pid =
+          result.exitCode === 0
+            ? Number.parseInt(result.stdout.trim().split(/\s+/u)[0] ?? "", 10) || null
+            : null;
+        this.#packagePids.set(packageName, pid);
+        return pid;
+      })
+      .finally(() => this.#packagePidRefreshes.delete(packageName));
+    this.#packagePidRefreshes.set(packageName, refresh);
+    return refresh;
+  }
+
+  public async readLogs(
+    since = "0",
+    packageName?: string,
+  ): Promise<{ entries: LogEntry[]; nextCursor: string }> {
+    if (!packageName) return this.logs.read(since);
+    const pid = await this.#packagePid(packageName);
+    const snapshot = this.logs.read(since);
+    return {
+      entries: pid ? snapshot.entries.filter((entry) => entry.pid === pid) : [],
+      nextCursor: snapshot.nextCursor,
+    };
+  }
+
+  public subscribeLogs(
+    packageName: string | undefined,
+    listener: (entry: LogEntry) => void,
+  ): () => void {
+    const onEntry = (entry: LogEntry) => {
+      if (!packageName) {
+        listener(entry);
+        return;
+      }
+      const pid = this.#packagePids.get(packageName);
+      if (pid === entry.pid) {
+        listener(entry);
+        return;
+      }
+      if (!pid) {
+        void this.#packagePid(packageName).then((refreshedPid) => {
+          if (refreshedPid === entry.pid) listener(entry);
+        });
+      }
+    };
+    this.logs.on("entry", onEntry);
+    return () => this.logs.off("entry", onEntry);
   }
 
   public async foreground(): Promise<ForegroundApp> {
