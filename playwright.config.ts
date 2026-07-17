@@ -4,7 +4,9 @@ export default defineConfig({
   testDir: "packages/web/e2e",
   testMatch: "**/*.pw.ts",
   timeout: 30_000,
-  fullyParallel: true,
+  // Keep each browser project's codec-heavy cases on one worker. Projects still
+  // run in parallel, while avoiding cross-test CPU starvation in Firefox.
+  fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

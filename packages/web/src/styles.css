@@ -215,13 +215,52 @@ footer {
 .drop-status {
   position: fixed;
   z-index: 10;
-  inset: 75px 24px auto;
-  padding: 14px;
-  text-align: center;
+  inset: 72px auto auto 82px;
+  width: min(430px, calc(100vw - 48px));
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid #64734f;
+  border-radius: 12px;
+  background: rgba(20, 26, 21, 0.97);
+  color: #edf4e8;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(14px);
+}
+.drop-status > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.drop-status strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.drop-status span {
+  flex: 0 0 auto;
+  color: #a9c86a;
+  font-size: 11px;
+}
+.drop-status progress {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
+}
+.drop-status progress::-webkit-progress-bar {
+  background: #303831;
+}
+.drop-status progress::-webkit-progress-value {
   background: #c7ff4a;
-  color: #152000;
-  border-radius: 10px;
-  font-weight: 700;
+}
+.drop-status progress::-moz-progress-bar {
+  background: #c7ff4a;
 }
 .workspace {
   min-height: 0;

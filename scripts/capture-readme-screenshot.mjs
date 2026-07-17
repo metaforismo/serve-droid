@@ -1,4 +1,6 @@
+/* global Blob, Event, EventTarget, ProgressEvent */
 import { chromium } from "@playwright/test";
+import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -54,12 +56,45 @@ try {
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1470, height: 820 } });
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => {
+    class DemoXMLHttpRequest extends EventTarget {
+      upload = new EventTarget();
+      status = 0;
+      responseText = "";
+      open() {}
+      setRequestHeader() {}
+      send(body) {
+        const total = body instanceof Blob ? body.size : 0;
+        globalThis.setTimeout(() => {
+          this.upload.dispatchEvent(
+            new ProgressEvent("progress", { lengthComputable: true, loaded: total, total }),
+          );
+          this.upload.dispatchEvent(new Event("load"));
+        }, 50);
+        globalThis.setTimeout(() => {
+          this.status = 200;
+          this.responseText = JSON.stringify({ schemaVersion: 1, ok: true, operation: "install" });
+          this.dispatchEvent(new Event("load"));
+        }, 5_000);
+      }
+    }
+    Object.defineProperty(globalThis, "XMLHttpRequest", {
+      configurable: true,
+      value: DemoXMLHttpRequest,
+    });
+  });
   await page.goto(`http://127.0.0.1:${port}/?demo=1`);
   await page.getByText("Demo preview", { exact: true }).waitFor();
   await page.locator(".phone img").waitFor();
   await page.getByText("Session attached to Pixel 9 Pro", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Open device clipboard" }).click();
   await page.getByLabel("Text to paste into device").fill("hello from the browser cockpit");
+  await page.getByLabel("Choose APK or file").setInputFiles({
+    name: "fixture.apk",
+    mimeType: "application/vnd.android.package-archive",
+    buffer: Buffer.alloc(32 * 1024),
+  });
+  await page.getByText("Installing fixture.apk on device", { exact: true }).waitFor();
   await page.screenshot({ path: output, type: "jpeg", quality: 88 });
   process.stdout.write(`Updated ${output}\n`);
 } finally {

@@ -16,6 +16,7 @@ import {
   SpeakerSlash,
   Stack,
   Trash,
+  UploadSimple,
 } from "@phosphor-icons/react";
 import {
   action,
@@ -28,6 +29,7 @@ import {
   type Observation,
   type RemoteAccess,
   type UiElement,
+  type UploadProgress,
 } from "./api.js";
 import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
 import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
@@ -106,6 +108,7 @@ function TokenEntry() {
 
 function Cockpit() {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selected, setSelected] = useState<UiElement | null>(null);
@@ -120,7 +123,14 @@ function Cockpit() {
   const [query, setQuery] = useState("");
   const [frames, setFrames] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
+  const [transfer, setTransfer] = useState<
+    | (Omit<UploadProgress, "phase"> & {
+        phase: UploadProgress["phase"] | "complete";
+        fileName: string;
+        operation: "install" | "push";
+      })
+    | null
+  >(null);
   const [decoder, setDecoder] = useState<"WebCodecs" | "TinyH264" | "">("");
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioStatus, setAudioStatus] = useState("Audio muted");
@@ -275,6 +285,12 @@ function Cockpit() {
     };
   }, [audioPlaying]);
 
+  useEffect(() => {
+    if (transfer?.phase !== "complete") return;
+    const timer = window.setTimeout(() => setTransfer(null), 3_000);
+    return () => window.clearTimeout(timer);
+  }, [transfer?.phase]);
+
   const filteredElements = useMemo(() => {
     const needle = query.toLocaleLowerCase();
     return (observation?.elements ?? []).filter((element) =>
@@ -376,19 +392,27 @@ function Cockpit() {
     await refresh();
   };
 
+  const transferFile = async (file: File) => {
+    const operation = file.name.toLocaleLowerCase().endsWith(".apk") ? "install" : "push";
+    setError("");
+    try {
+      const result = await upload(file, (progress) =>
+        setTransfer({ ...progress, fileName: file.name, operation }),
+      );
+      setTransfer((current) =>
+        current ? { ...current, phase: "complete", loaded: file.size, percent: 100 } : current,
+      );
+      setStatus(result.operation === "install" ? "APK installed" : "File pushed");
+    } catch (reason) {
+      setTransfer(null);
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const onDrop = async (event: React.DragEvent) => {
     event.preventDefault();
     const file = event.dataTransfer.files[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      await upload(file);
-      setStatus(file.name.endsWith(".apk") ? "APK installed" : "File pushed");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setUploading(false);
-    }
+    if (file) await transferFile(file);
   };
 
   return (
@@ -397,6 +421,17 @@ function Cockpit() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => void onDrop(event)}
     >
+      <input
+        ref={fileInput}
+        className="sr-only"
+        type="file"
+        aria-label="Choose APK or file"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0];
+          if (file) void transferFile(file);
+          event.currentTarget.value = "";
+        }}
+      />
       <header className="topbar">
         <div className="brand">
           <span className="mark">sd</span>
@@ -431,9 +466,33 @@ function Cockpit() {
           {error}
         </div>
       )}
-      {uploading && (
-        <div className="drop-status" role="status">
-          Transferring file…
+      {transfer && (
+        <div className="drop-status" role="status" aria-live="polite">
+          <div>
+            <strong>
+              {transfer.phase === "complete"
+                ? transfer.operation === "install"
+                  ? `Installed ${transfer.fileName}`
+                  : `Pushed ${transfer.fileName} to Downloads`
+                : transfer.phase === "uploading"
+                  ? `Uploading ${transfer.fileName}`
+                  : transfer.operation === "install"
+                    ? `Installing ${transfer.fileName} on device`
+                    : `Pushing ${transfer.fileName} to Downloads`}
+            </strong>
+            <span>
+              {transfer.phase === "complete"
+                ? "Done"
+                : transfer.phase === "uploading"
+                  ? `${transfer.percent}%`
+                  : "Finishing with ADB"}
+            </span>
+          </div>
+          <progress
+            aria-label={`Transfer progress for ${transfer.fileName}`}
+            max={100}
+            value={transfer.percent}
+          />
         </div>
       )}
 
@@ -499,6 +558,13 @@ function Cockpit() {
             onClick={() => setClipboardOpen((value) => !value)}
           >
             <ClipboardText aria-hidden="true" />
+          </button>
+          <button
+            title="Upload APK or file"
+            aria-label="Upload APK or file"
+            onClick={() => fileInput.current?.click()}
+          >
+            <UploadSimple aria-hidden="true" />
           </button>
         </aside>
 
