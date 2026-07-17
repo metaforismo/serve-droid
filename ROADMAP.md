@@ -11,7 +11,8 @@
 - Safari/Firefox decoder fallback.
 - Session traces and recordings.
 - Explicit authenticated tunnels and collaboration roles.
-- AVD creation and multi-device grid.
+- AVD creation/provisioning and a multi-device grid. Installed AVD discovery and explicit
+  start/stop lifecycle controls are available now.
 
 Items move into a release only after a scoped issue defines security and acceptance criteria.
 The detailed status and certification gates live in [docs/TODO.md](docs/TODO.md).

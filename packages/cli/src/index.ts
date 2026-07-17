@@ -6,11 +6,16 @@ import { Command } from "commander";
 import {
   AdbClient,
   AndroidService,
+  EmulatorClient,
   SCHEMA_VERSION,
   ServeDroidError,
   errorExitCode,
   listDevices,
+  listAvds,
   resolveAdbPath,
+  resolveEmulatorPath,
+  selectDevice,
+  startAvd,
 } from "@serve-droid/core";
 import { readSessionStates, removeSessionState, ServeDroidServer } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
@@ -37,6 +42,10 @@ async function client(): Promise<AdbClient> {
 
 async function service(options: GlobalOptions): Promise<AndroidService> {
   return AndroidService.connect(await client(), options.device);
+}
+
+async function emulator(): Promise<EmulatorClient> {
+  return new EmulatorClient(await resolveEmulatorPath());
 }
 
 function addGlobal(command: Command): Command {
@@ -110,6 +119,76 @@ program
             `${device.serial}\t${device.state}\t${device.model ?? "unknown"}\tAPI ${device.apiLevel ?? "?"}`,
         )
         .join("\n"),
+    );
+  });
+
+const avd = program
+  .command("avd")
+  .description("Discover and explicitly start or stop installed Android Virtual Devices.");
+
+avd
+  .command("list")
+  .description("List installed AVDs separately from ADB-connected devices.")
+  .action(async (_local, command) => {
+    const options = globalOptions(command);
+    const devices = await listAvds(await emulator());
+    output(
+      { schemaVersion: SCHEMA_VERSION, avds: devices },
+      options,
+      devices
+        .map(
+          (item) =>
+            `${item.name}\t${item.target ?? "unknown target"}\t${item.imageAvailable === false ? "missing image" : "ready"}`,
+        )
+        .join("\n") || "No installed AVDs.",
+    );
+  });
+
+avd
+  .command("start <name>")
+  .description("Start an installed AVD without downloading SDK content.")
+  .option("--headless", "run without an emulator window")
+  .option("--cold-boot", "ignore saved snapshots")
+  .option("--wipe-data", "reset the AVD data partition")
+  .option("--yes", "confirm destructive data reset")
+  .action(async (name, local, command) => {
+    const options = globalOptions(command);
+    if (local.wipeData && !local.yes) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "--wipe-data requires --yes.");
+    }
+    const started = await startAvd(await emulator(), name, {
+      headless: Boolean(local.headless),
+      coldBoot: Boolean(local.coldBoot),
+      wipeData: Boolean(local.wipeData),
+    });
+    output(
+      { schemaVersion: SCHEMA_VERSION, avd: started },
+      options,
+      `Started ${started.name} (pid ${started.pid}). It will appear in serve-droid devices after Android finishes booting.`,
+    );
+  });
+
+avd
+  .command("stop <serial>")
+  .description("Stop one running Android emulator selected by its ADB serial.")
+  .action(async (serial, _local, command) => {
+    const options = globalOptions(command);
+    const adb = await client();
+    const device = selectDevice(await listDevices(adb), serial);
+    if (device.kind !== "emulator") {
+      throw new ServeDroidError("INVALID_ARGUMENT", `${serial} is a physical device, not an AVD.`);
+    }
+    const result = await adb.run(["emu", "kill"], { serial: device.serial });
+    if (result.exitCode !== 0) {
+      throw new ServeDroidError(
+        "EMULATOR_FAILED",
+        result.stderr.trim() || "Emulator did not stop.",
+      );
+    }
+    output(
+      { schemaVersion: SCHEMA_VERSION, stopped: device.serial },
+      options,
+      `Stopped ${device.serial}.`,
     );
   });
 
