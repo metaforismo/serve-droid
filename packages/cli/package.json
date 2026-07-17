@@ -13,6 +13,6 @@
     "@serve-droid/core": "workspace:*",
     "@serve-droid/mcp": "workspace:*",
     "@serve-droid/server": "workspace:*",
-    "commander": "^14.0.2"
+    "commander": "^15.0.0"
   }
 }
