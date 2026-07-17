@@ -27,3 +27,8 @@ UI hierarchy capture verifies display metadata and foreground app identity befor
 UIAutomator dump, then checks declared element packages against that app. A context or package
 change triggers one fresh capture; a second mismatch fails with `TRANSPORT_FAILED` rather than
 returning elements from a mixed snapshot. Hierarchies that omit package attributes remain valid.
+
+The scrcpy video helper has one restart attempt per session. The first startup or runtime failure
+replaces the helper while keeping browser clients connected. A second failure is terminal and is
+reported as `TRANSPORT_FAILED` with bounded restart metadata; duplicate errors from the failed
+helper cannot consume additional attempts.

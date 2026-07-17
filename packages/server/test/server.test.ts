@@ -16,7 +16,12 @@ import {
 } from "../../core/src/index.js";
 import { assertPortAvailable } from "../src/listen.js";
 import { canSendAudio, encodeAudioPacket, ServeDroidServer } from "../src/server.js";
-import { SCRCPY_SERVER_SHA256, type VideoSource, type VideoSourceEvents } from "../src/video.js";
+import {
+  RestartingVideoSource,
+  SCRCPY_SERVER_SHA256,
+  type VideoSource,
+  type VideoSourceEvents,
+} from "../src/video.js";
 
 class FakeProcess extends EventEmitter {
   public stdin = new PassThrough();
@@ -57,6 +62,24 @@ class FakeVideo extends EventEmitter<VideoSourceEvents> implements VideoSource {
   public async stop(): Promise<void> {}
 }
 
+class ControlledVideo extends FakeVideo {
+  public starts = 0;
+  public stops = 0;
+
+  public constructor(private readonly startError?: Error) {
+    super();
+  }
+
+  public override async start(): Promise<void> {
+    this.starts += 1;
+    if (this.startError) throw this.startError;
+  }
+
+  public override async stop(): Promise<void> {
+    this.stops += 1;
+  }
+}
+
 function ok(stdout: string): RunResult {
   return { stdout, stderr: "", exitCode: 0 };
 }
@@ -79,6 +102,55 @@ afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
+});
+
+describe("bounded video recovery", () => {
+  it("restarts once after duplicate runtime errors and then surfaces a typed terminal error", async () => {
+    const first = new ControlledVideo();
+    const second = new ControlledVideo();
+    const sources = [first, second];
+    const video = new RestartingVideoSource(() => sources.shift()!);
+    const restarts: Array<{ attempt: number; maxAttempts: number }> = [];
+    video.on("restart", (event) => restarts.push(event));
+    const packets: Buffer[] = [];
+    video.on("data", (packet) => packets.push(packet));
+    await video.start();
+
+    first.emit("error", new Error("video stream failed"));
+    first.emit("error", new Error("duplicate output failure"));
+    await new Promise((resolvePromise) => setImmediate(resolvePromise));
+
+    expect(first.stops).toBe(1);
+    expect(second.starts).toBe(1);
+    expect(restarts).toEqual([{ attempt: 1, maxAttempts: 1 }]);
+    second.emit("data", Buffer.from([1, 2, 3]));
+    expect(packets).toEqual([Buffer.from([1, 2, 3])]);
+
+    const terminal = new Promise<Error>((resolvePromise) => video.once("error", resolvePromise));
+    second.emit("error", new Error("replacement failed"));
+    await expect(terminal).resolves.toMatchObject({
+      code: "TRANSPORT_FAILED",
+      details: { restartAttempts: 1, maxRestarts: 1, cause: "replacement failed" },
+    });
+    expect(sources).toHaveLength(0);
+    await video.stop();
+  });
+
+  it("uses the same single restart budget when initial startup fails", async () => {
+    const first = new ControlledVideo(new Error("initial start failed"));
+    const second = new ControlledVideo();
+    const sources = [first, second];
+    const video = new RestartingVideoSource(() => sources.shift()!);
+    const restarts: number[] = [];
+    video.on("restart", ({ attempt }) => restarts.push(attempt));
+
+    await video.start();
+
+    expect(first.stops).toBe(1);
+    expect(second.starts).toBe(1);
+    expect(restarts).toEqual([1]);
+    await video.stop();
+  });
 });
 
 describe("authenticated HTTP server", () => {

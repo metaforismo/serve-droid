@@ -7,6 +7,7 @@ import { AdbServerClient } from "@yume-chan/adb";
 import { AdbServerNodeTcpConnector } from "@yume-chan/adb-server-node-tcp";
 import { AdbScrcpyClient, AdbScrcpyOptionsLatest } from "@yume-chan/adb-scrcpy";
 import { AndroidAvcLevel, AndroidAvcProfile, ScrcpyCodecOptions } from "@yume-chan/scrcpy";
+import { ServeDroidError } from "@serve-droid/core";
 import type { Adb } from "@yume-chan/adb";
 
 export interface VideoSourceEvents {
@@ -14,6 +15,7 @@ export interface VideoSourceEvents {
   audioData: [{ data: Buffer; pts: bigint }];
   audioState: [AudioState];
   error: [Error];
+  restart: [{ attempt: number; maxAttempts: number }];
   close: [];
   size: [{ width: number; height: number }];
 }
@@ -28,6 +30,124 @@ export interface AudioState {
 export interface VideoSource extends EventEmitter<VideoSourceEvents> {
   start(): Promise<void>;
   stop(): Promise<void>;
+}
+
+const MAX_VIDEO_RESTARTS = 1;
+
+export class RestartingVideoSource extends EventEmitter<VideoSourceEvents> implements VideoSource {
+  #source: VideoSource | undefined;
+  #generation = 0;
+  #restartAttempts = 0;
+  #started = false;
+  #stopped = false;
+  #recovering = false;
+
+  public constructor(private readonly createSource: () => VideoSource) {
+    super();
+  }
+
+  public async start(): Promise<void> {
+    if (this.#started || this.#stopped) return;
+    this.#started = true;
+    try {
+      await this.#startSource();
+    } catch (error) {
+      if (!this.#consumeRestart()) throw this.#terminalError(error);
+      try {
+        await this.#startSource();
+      } catch (retryError) {
+        throw this.#terminalError(retryError);
+      }
+    }
+  }
+
+  public async stop(): Promise<void> {
+    if (this.#stopped) return;
+    this.#stopped = true;
+    const source = this.#detachSource();
+    await source?.stop().catch(() => undefined);
+    this.emit("close");
+  }
+
+  async #startSource(): Promise<void> {
+    const source = this.createSource();
+    const generation = ++this.#generation;
+    this.#source = source;
+    source.on("data", (chunk) => this.#forward(source, generation, "data", chunk));
+    source.on("audioData", (packet) => this.#forward(source, generation, "audioData", packet));
+    source.on("audioState", (state) => this.#forward(source, generation, "audioState", state));
+    source.on("size", (size) => this.#forward(source, generation, "size", size));
+    source.on("error", (error) => {
+      if (this.#isCurrent(source, generation)) void this.#recover(source, error);
+    });
+    try {
+      await source.start();
+    } catch (error) {
+      if (this.#isCurrent(source, generation)) this.#detachSource();
+      await source.stop().catch(() => undefined);
+      throw error;
+    }
+  }
+
+  #forward(
+    source: VideoSource,
+    generation: number,
+    event: "data" | "audioData" | "audioState" | "size",
+    value: Buffer | { data: Buffer; pts: bigint } | AudioState | { width: number; height: number },
+  ): void {
+    if (!this.#isCurrent(source, generation)) return;
+    if (event === "data") this.emit("data", value as Buffer);
+    else if (event === "audioData") this.emit("audioData", value as { data: Buffer; pts: bigint });
+    else if (event === "audioState") this.emit("audioState", value as AudioState);
+    else this.emit("size", value as { width: number; height: number });
+  }
+
+  #isCurrent(source: VideoSource, generation: number): boolean {
+    return !this.#stopped && this.#source === source && this.#generation === generation;
+  }
+
+  #detachSource(): VideoSource | undefined {
+    const source = this.#source;
+    this.#source = undefined;
+    this.#generation += 1;
+    return source;
+  }
+
+  #consumeRestart(): boolean {
+    if (this.#restartAttempts >= MAX_VIDEO_RESTARTS) return false;
+    this.#restartAttempts += 1;
+    this.emit("restart", { attempt: this.#restartAttempts, maxAttempts: MAX_VIDEO_RESTARTS });
+    return true;
+  }
+
+  async #recover(source: VideoSource, error: Error): Promise<void> {
+    if (this.#recovering || this.#stopped || this.#source !== source) return;
+    this.#recovering = true;
+    this.#detachSource();
+    await source.stop().catch(() => undefined);
+    try {
+      if (!this.#consumeRestart()) {
+        this.emit("error", this.#terminalError(error));
+        return;
+      }
+      try {
+        await this.#startSource();
+      } catch (restartError) {
+        this.emit("error", this.#terminalError(restartError));
+      }
+    } finally {
+      this.#recovering = false;
+    }
+  }
+
+  #terminalError(error: unknown): ServeDroidError {
+    const cause = error instanceof Error ? error.message : String(error);
+    return new ServeDroidError(
+      "TRANSPORT_FAILED",
+      `scrcpy video helper failed after ${this.#restartAttempts} restart attempt.`,
+      { restartAttempts: this.#restartAttempts, maxRestarts: MAX_VIDEO_RESTARTS, cause },
+    );
+  }
 }
 
 const SCRCPY_VERSION = "3.3.3";

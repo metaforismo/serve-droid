@@ -16,7 +16,12 @@ import {
   type Gesture,
   type SessionInfo,
 } from "@serve-droid/core";
-import { ScrcpyH264Source, type AudioState, type VideoSource } from "./video.js";
+import {
+  RestartingVideoSource,
+  ScrcpyH264Source,
+  type AudioState,
+  type VideoSource,
+} from "./video.js";
 import { removeSessionState, writeSessionState } from "./state.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 import type { TunnelStatus } from "./tunnel.js";
@@ -189,7 +194,9 @@ export class ServeDroidServer {
     };
     this.#video =
       options.videoSource ??
-      new ScrcpyH264Source(service.device.serial, audioRequested && audioSupported);
+      new RestartingVideoSource(
+        () => new ScrcpyH264Source(service.device.serial, audioRequested && audioSupported),
+      );
     this.#video.on("data", (chunk) => {
       this.#recorder?.recordVideo(chunk);
       for (const client of this.#videoWebSocket.clients) {
@@ -202,6 +209,9 @@ export class ServeDroidServer {
       for (const client of this.#videoWebSocket.clients) {
         if (client.readyState === WebSocket.OPEN) client.close(1011, error.message.slice(0, 120));
       }
+    });
+    this.#video.on("restart", ({ attempt, maxAttempts }) => {
+      this.#recorder?.recordEvent("video-restart", { attempt, maxAttempts });
     });
     this.#video.on("size", (size) => this.#recorder?.recordEvent("display-size", size));
     this.#video.on("audioState", (state) => {
