@@ -9,7 +9,7 @@ import {
   type Observation,
   type UiElement,
 } from "./api.js";
-import { H264CanvasPlayer } from "./video.js";
+import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
 
 type Panel = "logs" | "tree";
 const demoMode = new URLSearchParams(location.search).has("demo");
@@ -30,6 +30,7 @@ export function App() {
   const [frames, setFrames] = useState(0);
   const [previewUrl, setPreviewUrl] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [decoder, setDecoder] = useState<"WebCodecs" | "TinyH264" | "">("");
 
   const refresh = useCallback(async () => {
     try {
@@ -79,26 +80,36 @@ export function App() {
   useEffect(() => {
     if (demoMode) return;
     if (!canvas.current) return;
-    let player: H264CanvasPlayer;
-    try {
-      player = new H264CanvasPlayer({
-        canvas: canvas.current,
-        onFrame: () => setFrames((value) => value + 1),
-        onError: setError,
-      });
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-      return;
-    }
-    const socket = authenticatedWebSocket("/api/v1/video");
-    socket.binaryType = "arraybuffer";
-    socket.onopen = () => setStatus("Streaming");
-    socket.onmessage = (event) => player.push(event.data as ArrayBuffer);
-    socket.onclose = (event) =>
-      event.code !== 1000 && setError(event.reason || "Video stream closed.");
+    let player: CanvasPlayer | undefined;
+    let socket: WebSocket | undefined;
+    let cancelled = false;
+    void createH264CanvasPlayer({
+      canvas: canvas.current,
+      onFrame: () => setFrames((value) => value + 1),
+      onError: setError,
+    })
+      .then((created) => {
+        if (cancelled) {
+          created.close();
+          return;
+        }
+        player = created;
+        const backend = created.backend === "webcodecs" ? "WebCodecs" : "TinyH264";
+        setDecoder(backend);
+        socket = authenticatedWebSocket("/api/v1/video");
+        socket.binaryType = "arraybuffer";
+        socket.onopen = () => setStatus(`Streaming · ${backend}`);
+        socket.onmessage = (event) => player?.push(event.data as ArrayBuffer);
+        socket.onclose = (event) =>
+          event.code !== 1000 && setError(event.reason || "Video stream closed.");
+      })
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : String(reason)),
+      );
     return () => {
-      socket.close();
-      player.close();
+      cancelled = true;
+      socket?.close();
+      player?.close();
     };
   }, []);
 
@@ -171,6 +182,7 @@ export function App() {
             {observation ? `${observation.display.width}×${observation.display.height}` : ""}
           </span>
           <span>{frames ? `${frames} frames` : ""}</span>
+          <span>{decoder}</span>
         </div>
       </header>
 

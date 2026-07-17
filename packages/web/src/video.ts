@@ -1,8 +1,22 @@
+import type { TinyH264Decoder } from "@yume-chan/scrcpy-decoder-tinyh264";
+
 interface DecoderOptions {
   canvas: HTMLCanvasElement;
   onFrame: () => void;
   onError: (message: string) => void;
 }
+
+export type DecoderBackend = "webcodecs" | "tinyh264";
+
+export interface CanvasPlayer {
+  readonly backend: DecoderBackend;
+  push(chunk: ArrayBuffer): void;
+  close(): void;
+}
+
+type H264Packet =
+  | { type: "configuration"; data: Uint8Array }
+  | { type: "data"; data: Uint8Array; keyframe: boolean };
 
 function startCodes(data: Uint8Array): number[] {
   const positions: number[] = [];
@@ -18,7 +32,16 @@ function startCodes(data: Uint8Array): number[] {
   return positions;
 }
 
-export class H264CanvasPlayer {
+export function firstNalUnitType(data: Uint8Array): number | null {
+  const position = startCodes(data)[0];
+  if (position === undefined) return null;
+  const prefix = data[position + 2] === 1 ? 3 : 4;
+  const header = data[position + prefix];
+  return header === undefined ? null : header & 0x1f;
+}
+
+export class H264CanvasPlayer implements CanvasPlayer {
+  public readonly backend = "webcodecs" as const;
   readonly #decoder: VideoDecoder;
   readonly #onFrame: () => void;
   #buffer = new Uint8Array();
@@ -78,4 +101,68 @@ export class H264CanvasPlayer {
   public close(): void {
     this.#decoder.close();
   }
+}
+
+class TinyH264CanvasPlayer implements CanvasPlayer {
+  public readonly backend = "tinyh264" as const;
+  readonly #decoder;
+  readonly #writer: WritableStreamDefaultWriter<H264Packet>;
+  readonly #frameTimer: number;
+  readonly #onError: (message: string) => void;
+  #lastFrames = 0;
+  #queued = 0;
+  #closed = false;
+
+  public constructor(decoder: InstanceType<typeof TinyH264Decoder>, options: DecoderOptions) {
+    this.#decoder = decoder;
+    this.#writer = decoder.writable.getWriter() as WritableStreamDefaultWriter<H264Packet>;
+    this.#onError = options.onError;
+    this.#frameTimer = window.setInterval(() => {
+      const rendered = decoder.framesRendered;
+      const count = Math.min(10, rendered - this.#lastFrames);
+      this.#lastFrames = rendered;
+      for (let index = 0; index < count; index += 1) options.onFrame();
+    }, 50);
+  }
+
+  public push(chunk: ArrayBuffer): void {
+    if (this.#closed) return;
+    const data = new Uint8Array(chunk);
+    const nalType = firstNalUnitType(data);
+    if (nalType === null) return;
+    const configuration = nalType === 7 || nalType === 8;
+    const keyframe = nalType === 5;
+    if (!configuration && !keyframe && this.#queued >= 8) return;
+    const packet: H264Packet = configuration
+      ? { type: "configuration", data }
+      : { type: "data", data, keyframe };
+    this.#queued += 1;
+    void this.#writer
+      .write(packet)
+      .catch((error: unknown) =>
+        this.#onError(error instanceof Error ? error.message : String(error)),
+      )
+      .finally(() => {
+        this.#queued -= 1;
+      });
+  }
+
+  public close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    window.clearInterval(this.#frameTimer);
+    void this.#writer.close().catch(() => undefined);
+    this.#decoder.dispose();
+  }
+}
+
+export async function createH264CanvasPlayer(options: DecoderOptions): Promise<CanvasPlayer> {
+  if (typeof VideoDecoder !== "undefined") return new H264CanvasPlayer(options);
+  if (!("WebAssembly" in window) || !("Worker" in window)) {
+    throw new Error(
+      "Video decoding requires WebCodecs or a browser with WebAssembly and Web Workers.",
+    );
+  }
+  const { TinyH264Decoder } = await import("@yume-chan/scrcpy-decoder-tinyh264");
+  return new TinyH264CanvasPlayer(new TinyH264Decoder({ canvas: options.canvas }), options);
 }

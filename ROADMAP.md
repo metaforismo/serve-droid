@@ -8,7 +8,7 @@
 ## After v0.1 validation
 
 - Native scrcpy transport performance hardening and audio.
-- Safari/Firefox decoder fallback.
+- Safari/Firefox decoder performance hardening. The TinyH264 compatibility path is available now.
 - Rich trace export and browser recording controls. Bounded CLI opt-in H.264/event recording is
   available now.
 - Explicit authenticated tunnels and collaboration roles.

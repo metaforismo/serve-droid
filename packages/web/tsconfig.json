@@ -9,5 +9,5 @@
     "declarationMap": false,
     "types": ["vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "e2e/**/*.ts", "vite.config.ts"]
 }

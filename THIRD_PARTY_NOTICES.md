@@ -5,6 +5,10 @@ by their respective licenses.
 
 - [scrcpy](https://github.com/Genymobile/scrcpy), Apache-2.0, Copyright Genymobile and Romain Vimont.
 - [Tango ADB / ya-webadb](https://github.com/yume-chan/ya-webadb), MIT, Copyright yume-chan.
+- [TinyH264](https://github.com/udevbe/tinyh264), Apache-2.0, used by Tango's software
+  decoder fallback.
+- [yuv-buffer](https://github.com/bvibber/yuv-buffer) and
+  [yuv-canvas](https://github.com/bvibber/yuv-canvas), MIT, Copyright Brooke Vibber.
 - [Model Context Protocol TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), MIT.
 - React, Vite, Commander, ws, fast-xml-parser, sharp, and Zod under their published licenses.
 
