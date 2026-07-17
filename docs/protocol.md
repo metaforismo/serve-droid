@@ -5,6 +5,7 @@ All responses include `schemaVersion: 1`. Every endpoint except `GET /api/v1/hea
 
 - `GET /api/v1/devices`, `/session`, `/observe`, `/tree`, `/screenshot`
 - `GET /api/v1/logs` uses Server-Sent Events.
+- `GET /api/v1/recording` returns the bounded local recorder status or `null`.
 - `GET /api/v1/video` upgrades to a binary H.264 WebSocket.
 - `GET /api/v1/control` upgrades to a JSON action WebSocket.
 - `POST /api/v1/actions`, `/apps`, `/permissions`, `/files` mutate device state.

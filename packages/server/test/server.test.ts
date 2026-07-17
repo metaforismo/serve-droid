@@ -1,8 +1,9 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AndroidService,
@@ -68,8 +69,12 @@ const device: DeviceSummary = {
 };
 
 const servers: ServeDroidServer[] = [];
+const temporaryDirectories: string[] = [];
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
+  await Promise.all(
+    temporaryDirectories.splice(0).map((path) => rm(path, { recursive: true, force: true })),
+  );
 });
 
 describe("authenticated HTTP server", () => {
@@ -98,6 +103,35 @@ describe("authenticated HTTP server", () => {
     });
     expect(unauthorizedAction.status).toBe(401);
     expect(adb.calls.some((call) => call.includes("tap"))).toBe(false);
+  });
+
+  it("records action metadata without typed text, tokens, or Logcat", async () => {
+    const root = await mkdtemp(join(tmpdir(), "serve-droid-server-recording-test-"));
+    temporaryDirectories.push(root);
+    const server = new ServeDroidServer(new AndroidService(new FakeAdb(), device), {
+      token: "token-that-must-not-be-recorded",
+      videoSource: new FakeVideo(),
+      recording: { directory: root, maxBytes: 1024 * 1024, maxDurationMs: 60_000 },
+    });
+    servers.push(server);
+    const session = await server.start();
+    const response = await fetch(`${session.url}/api/v1/actions`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer token-that-must-not-be-recorded",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ type: "type", text: "user-secret-text" }),
+    });
+    expect(response.status).toBe(200);
+    const directory = server.recording?.directory;
+    expect(directory).toBeTruthy();
+    await server.stop();
+    const events = await readFile(join(directory!, "events.jsonl"), "utf8");
+    expect(events).toContain('"textLength":16');
+    expect(events).not.toContain("user-secret-text");
+    expect(events).not.toContain("token-that-must-not-be-recorded");
+    expect(events).not.toContain("Logcat");
   });
 });
 

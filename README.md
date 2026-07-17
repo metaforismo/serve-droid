@@ -56,6 +56,10 @@ npx serve-droid swipe 0.5 0.8 0.5 0.2 --duration 350
 npx serve-droid app deep-link 'servedroid://fixture/example'
 ```
 
+Session capture is explicit and bounded. `--record ./recordings` stores the original H.264 stream
+plus privacy-filtered event summaries; it never records tokens, Logcat, typed text, URLs, or file
+contents. See the [recording and retention guide](docs/recording.md).
+
 ## MCP
 
 ```json
@@ -86,9 +90,9 @@ Read [SECURITY.md](SECURITY.md) before binding to a LAN interface.
 ## Supported and deferred
 
 v0.1 targets macOS, Linux, Windows, Android API 26+, local emulators, USB devices, Wi-Fi ADB,
-Chrome, and Edge. Installed AVD discovery and lifecycle controls are included. Safari, Firefox,
-audio, cloud device labs, tunnels, accounts, multi-user roles, AVD creation/provisioning, iOS, and
-arbitrary shell access are deferred.
+Chrome, and Edge. Installed AVD lifecycle controls and opt-in bounded local recording are included.
+Safari, Firefox, audio, cloud device labs, tunnels, accounts, multi-user roles, AVD
+creation/provisioning, iOS, and arbitrary shell access are deferred.
 
 ## Development
 

@@ -18,6 +18,7 @@ import {
 } from "@serve-droid/core";
 import { ScrcpyH264Source, type VideoSource } from "./video.js";
 import { removeSessionState, writeSessionState } from "./state.js";
+import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -28,6 +29,7 @@ export interface ServerOptions {
   token?: string;
   webRoot?: string;
   videoSource?: VideoSource;
+  recording?: Omit<RecordingOptions, "serial">;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -107,6 +109,8 @@ export class ServeDroidServer {
   readonly #host: string;
   readonly #requestedPort: number;
   readonly #webRoot: string;
+  readonly #recordingOptions: Omit<RecordingOptions, "serial"> | undefined;
+  #recorder: SessionRecorder | undefined;
   #session: SessionInfo | undefined;
   #stopping = false;
 
@@ -118,21 +122,25 @@ export class ServeDroidServer {
     this.#requestedPort = options.port ?? 0;
     this.#token = options.token ?? randomBytes(32).toString("base64url");
     this.#webRoot = options.webRoot ?? defaultWebRoot();
+    this.#recordingOptions = options.recording;
     this.#http = createServer((request, response) => void this.#handle(request, response));
     this.#videoWebSocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
     this.#controlWebSocket = new WebSocketServer({ noServer: true, maxPayload: JSON_LIMIT });
     this.#video = options.videoSource ?? new ScrcpyH264Source(service.device.serial);
     this.#video.on("data", (chunk) => {
+      this.#recorder?.recordVideo(chunk);
       for (const client of this.#videoWebSocket.clients) {
         if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 4 * 1024 * 1024)
           client.send(chunk);
       }
     });
     this.#video.on("error", (error) => {
+      this.#recorder?.recordEvent("video-error", { kind: error.name || "transport" });
       for (const client of this.#videoWebSocket.clients) {
         if (client.readyState === WebSocket.OPEN) client.close(1011, error.message.slice(0, 120));
       }
     });
+    this.#video.on("size", (size) => this.#recorder?.recordEvent("display-size", size));
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#controlWebSocket.on("connection", (socket) => {
       socket.on("message", (message) => {
@@ -146,6 +154,10 @@ export class ServeDroidServer {
 
   public get token(): string {
     return this.#token;
+  }
+
+  public get recording(): RecordingStatus | null {
+    return this.#recorder?.status ?? null;
   }
 
   public async start(): Promise<SessionInfo> {
@@ -169,6 +181,18 @@ export class ServeDroidServer {
       startedAt: new Date().toISOString(),
     };
     try {
+      if (this.#recordingOptions) {
+        this.#recorder = await SessionRecorder.create({
+          ...this.#recordingOptions,
+          serial: this.service.device.serial,
+        });
+        this.#session.recordingDirectory = this.#recorder.status.directory;
+        this.#recorder.recordEvent("session-start", {
+          serial: this.service.device.serial,
+          width: display.width,
+          height: display.height,
+        });
+      }
       this.service.startLogs();
       await this.#video.start();
       await writeSessionState(this.#session);
@@ -177,6 +201,8 @@ export class ServeDroidServer {
       this.#session = undefined;
       this.service.stop();
       await this.#video.stop().catch(() => undefined);
+      await this.#recorder?.stop().catch(() => undefined);
+      this.#recorder = undefined;
       await new Promise<void>((resolvePromise) => this.#http.close(() => resolvePromise()));
       throw error;
     }
@@ -186,6 +212,8 @@ export class ServeDroidServer {
     if (this.#stopping) return;
     this.#stopping = true;
     await this.#video.stop();
+    this.#recorder?.recordEvent("session-stop");
+    await this.#recorder?.stop();
     this.service.stop();
     for (const client of [...this.#videoWebSocket.clients, ...this.#controlWebSocket.clients])
       client.close(1001);
@@ -259,6 +287,11 @@ export class ServeDroidServer {
             height: observation.display.height,
             url: "/api/v1/screenshot",
           },
+        });
+      } else if (url.pathname === "/api/v1/recording" && request.method === "GET") {
+        json(response, 200, {
+          schemaVersion: SCHEMA_VERSION,
+          recording: this.recording,
         });
       } else if (url.pathname === "/api/v1/logs" && request.method === "GET") {
         this.#serveLogs(request, response, url.searchParams.get("since") ?? "0");
@@ -352,6 +385,24 @@ export class ServeDroidServer {
     else if (type === "key") await this.service.actions.key(body.key as never);
     else if (type === "rotate") await this.service.actions.rotate(body.orientation as never);
     else throw new ServeDroidError("INVALID_ARGUMENT", `Unsupported action '${type}'.`);
+    const details: Record<string, unknown> = {};
+    if (type === "tap") Object.assign(details, { x: Number(body.x), y: Number(body.y) });
+    else if (type === "swipe")
+      Object.assign(details, {
+        x1: Number(body.x1),
+        y1: Number(body.y1),
+        x2: Number(body.x2),
+        y2: Number(body.y2),
+        durationMs: Number(body.durationMs ?? 300),
+      });
+    else if (type === "gesture")
+      details.pointCount = Array.isArray((body.gesture as Gesture | undefined)?.points)
+        ? (body.gesture as Gesture).points.length
+        : 0;
+    else if (type === "type") details.textLength = stringValue(body.text).length;
+    else if (type === "key") details.key = stringValue(body.key);
+    else if (type === "rotate") details.orientation = stringValue(body.orientation);
+    this.#recorder?.recordEvent("action", { action: type, ...details });
     return { schemaVersion: SCHEMA_VERSION, ok: true };
   }
 
@@ -367,6 +418,11 @@ export class ServeDroidServer {
     else if (operation === "deep-link")
       await this.service.actions.deepLink(stringValue(body.url), packageName || undefined);
     else throw new ServeDroidError("INVALID_ARGUMENT", `Unsupported app operation '${operation}'.`);
+    this.#recorder?.recordEvent("app", {
+      operation,
+      packageName: packageName || null,
+      activity: operation === "launch" ? stringValue(body.activity) || null : null,
+    });
     return { schemaVersion: SCHEMA_VERSION, ok: true };
   }
 
@@ -376,6 +432,11 @@ export class ServeDroidServer {
       stringValue(body.permission),
       stringValue(body.packageName),
     );
+    this.#recorder?.recordEvent("permission", {
+      operation: stringValue(body.operation),
+      permission: stringValue(body.permission),
+      packageName: stringValue(body.packageName),
+    });
     return { schemaVersion: SCHEMA_VERSION, ok: true, output };
   }
 
@@ -390,9 +451,11 @@ export class ServeDroidServer {
       await writeFile(path, await readBody(request, FILE_LIMIT), { flag: "wx", mode: 0o600 });
       if (name.toLocaleLowerCase().endsWith(".apk")) {
         await this.service.actions.install(path);
+        this.#recorder?.recordEvent("file", { operation: "install-apk" });
         return { schemaVersion: SCHEMA_VERSION, ok: true, operation: "install" };
       }
       const destination = await this.service.actions.push(path);
+      this.#recorder?.recordEvent("file", { operation: "push" });
       return { schemaVersion: SCHEMA_VERSION, ok: true, operation: "push", destination };
     } finally {
       await rm(directory, { recursive: true, force: true });

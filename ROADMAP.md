@@ -9,7 +9,8 @@
 
 - Native scrcpy transport performance hardening and audio.
 - Safari/Firefox decoder fallback.
-- Session traces and recordings.
+- Rich trace export and browser recording controls. Bounded CLI opt-in H.264/event recording is
+  available now.
 - Explicit authenticated tunnels and collaboration roles.
 - AVD creation/provisioning and a multi-device grid. Installed AVD discovery and explicit
   start/stop lifecycle controls are available now.
