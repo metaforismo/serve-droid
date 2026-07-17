@@ -32,6 +32,7 @@ Android Platform Tools are never downloaded silently or redistributed.
 
 ```bash
 npx serve-droid doctor
+npx serve-droid avd list
 npx serve-droid start --detach
 npx serve-droid list --json
 ```
@@ -42,6 +43,10 @@ it into the local UI. To select a device:
 ```bash
 npx serve-droid --device emulator-5554
 ```
+
+Installed emulators can be managed explicitly with `serve-droid avd start <name>` and
+`serve-droid avd stop <serial>`. No SDK content is downloaded or licensed automatically; see the
+[AVD lifecycle guide](docs/avd.md).
 
 Coordinates are normalized: `(0, 0)` is the logical top-left and `(1, 1)` is the bottom-right.
 
@@ -81,8 +86,9 @@ Read [SECURITY.md](SECURITY.md) before binding to a LAN interface.
 ## Supported and deferred
 
 v0.1 targets macOS, Linux, Windows, Android API 26+, local emulators, USB devices, Wi-Fi ADB,
-Chrome, and Edge. Safari, Firefox, audio, cloud device labs, tunnels, accounts, multi-user roles,
-recording, AVD provisioning, iOS, and arbitrary shell access are deferred.
+Chrome, and Edge. Installed AVD discovery and lifecycle controls are included. Safari, Firefox,
+audio, cloud device labs, tunnels, accounts, multi-user roles, AVD creation/provisioning, iOS, and
+arbitrary shell access are deferred.
 
 ## Development
 

@@ -134,6 +134,9 @@ because its code path compiles.
 - [ ] Audio streaming.
 - [ ] Session recording and trace export.
 - [ ] Authenticated tunnels and collaboration roles.
-- [ ] AVD provisioning and multi-device grids.
+- [x] Discover installed AVDs independently and provide explicit start/stop lifecycle controls.
+- [x] Detect missing AVD system images without downloading content or accepting licenses.
+- [x] Exercise AVD discovery/start validation across the macOS, Linux, and Windows CI matrix.
+- [ ] AVD creation/provisioning and multi-device grids.
 - [ ] Cloud device providers.
 - [ ] iOS support.
