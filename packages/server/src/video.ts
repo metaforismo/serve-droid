@@ -15,11 +15,7 @@ export interface VideoSourceEvents {
   size: [{ width: number; height: number }];
 }
 
-export interface VideoSource {
-  on<K extends keyof VideoSourceEvents>(
-    event: K,
-    listener: (...args: VideoSourceEvents[K]) => void,
-  ): this;
+export interface VideoSource extends EventEmitter<VideoSourceEvents> {
   start(): Promise<void>;
   stop(): Promise<void>;
 }

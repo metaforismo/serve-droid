@@ -23,7 +23,7 @@
     "automation"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13.0"
   },
   "packageManager": "pnpm@10.28.0",
   "workspaces": [
@@ -68,7 +68,7 @@
     "esbuild": "^0.28.1",
     "prettier": "^3.7.4",
     "tsx": "^4.21.0",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.53.0",
     "vitest": "^4.0.17"
   }
