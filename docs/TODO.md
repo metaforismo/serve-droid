@@ -55,7 +55,7 @@ because its code path compiles.
 - [ ] Confirm the first decoded browser frame within five seconds on a warmed emulator.
 - [ ] Measure tap-to-visible-response p95 below 200 ms.
 - [ ] Sustain interactive 30 FPS during ordinary UI motion.
-- [ ] Restart a failed scrcpy helper exactly once and expose the terminal structured error.
+- [x] Restart a failed scrcpy helper exactly once and expose the terminal structured error.
 - [ ] Exercise resolution changes, keyframes, rotation, and malformed packets on real transport.
 - [ ] Prove two simultaneous browser clients can view and control one session.
 - [ ] Run and measure a bounded 60-minute session.
