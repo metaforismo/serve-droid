@@ -18,3 +18,7 @@ Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other f
 progress, then switch to a distinct indeterminate install or push phase while waiting for ADB. The
 server does not invent a percentage for Android-side work. Successful responses identify the
 `install` or `push` operation and include the remote destination for pushed files.
+
+Rotation actions complete only after the device reports the requested logical orientation. If
+display metadata does not settle within five seconds, the action fails instead of allowing a later
+normalized coordinate action to use stale dimensions.
