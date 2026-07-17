@@ -2,7 +2,9 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { join, resolve } from "node:path";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { WebSocket } from "ws";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +14,7 @@ import {
   type DeviceSummary,
   type RunResult,
 } from "../../core/src/index.js";
+import { assertPortAvailable } from "../src/listen.js";
 import { canSendAudio, encodeAudioPacket, ServeDroidServer } from "../src/server.js";
 import { SCRCPY_SERVER_SHA256, type VideoSource, type VideoSourceEvents } from "../src/video.js";
 
@@ -251,6 +254,32 @@ describe("authenticated HTTP server", () => {
     expect(response.headers.get("content-security-policy")).toContain(
       "frame-ancestors http://127.0.0.1:9001",
     );
+  });
+
+  it("diagnoses an occupied fixed port before device startup", async () => {
+    const blocker = createServer();
+    await new Promise<void>((resolvePromise, reject) => {
+      blocker.once("error", reject);
+      blocker.listen(0, "127.0.0.1", resolvePromise);
+    });
+    const port = (blocker.address() as AddressInfo).port;
+    try {
+      await expect(assertPortAvailable("127.0.0.1", port)).rejects.toMatchObject({
+        code: "PORT_IN_USE",
+        details: { host: "127.0.0.1", port },
+      });
+      const adb = new FakeAdb();
+      const server = new ServeDroidServer(new AndroidService(adb, device), {
+        port,
+        videoSource: new FakeVideo(),
+      });
+      await expect(server.start()).rejects.toMatchObject({ code: "PORT_IN_USE" });
+      expect(adb.calls).toEqual([]);
+    } finally {
+      await new Promise<void>((resolvePromise, reject) =>
+        blocker.close((error) => (error ? reject(error) : resolvePromise())),
+      );
+    }
   });
 });
 

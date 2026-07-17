@@ -17,6 +17,7 @@ export type ErrorCode =
   | "PACKAGE_NOT_FOUND"
   | "AUTHENTICATION_REQUIRED"
   | "SESSION_NOT_FOUND"
+  | "PORT_IN_USE"
   | "TRANSPORT_FAILED";
 
 export class ServeDroidError extends Error {
@@ -37,6 +38,7 @@ export function errorExitCode(error: unknown): number {
   if (error.code.startsWith("EMULATOR_") || error.code.startsWith("AVD_")) return 11;
   if (error.code.startsWith("DEVICE_") || error.code === "UNSUPPORTED_ANDROID") return 20;
   if (error.code === "INVALID_ARGUMENT") return 30;
+  if (error.code === "PORT_IN_USE") return 31;
   if (error.code === "AUTHENTICATION_REQUIRED") return 40;
   if (error.code === "SESSION_NOT_FOUND") return 50;
   return 1;
