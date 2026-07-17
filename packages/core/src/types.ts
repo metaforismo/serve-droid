@@ -101,4 +101,5 @@ export interface SessionInfo {
   url: string;
   token: string;
   startedAt: string;
+  recordingDirectory?: string;
 }

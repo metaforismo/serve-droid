@@ -17,7 +17,13 @@ import {
   selectDevice,
   startAvd,
 } from "@serve-droid/core";
-import { readSessionStates, removeSessionState, ServeDroidServer } from "@serve-droid/server";
+import {
+  readSessionStates,
+  recoverPartialRecordings,
+  removeRecording,
+  removeSessionState,
+  ServeDroidServer,
+} from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
 
 interface GlobalOptions {
@@ -198,6 +204,19 @@ program
   .option("--host <host>", "listen host", "127.0.0.1")
   .option("--port <port>", "listen port", (value) => Number.parseInt(value, 10), 0)
   .option("--token <token>", "fixed bearer token")
+  .option("--record <directory>", "opt in to bounded H.264 and redacted event recording")
+  .option(
+    "--record-max-mb <megabytes>",
+    "maximum recording size",
+    (value) => Number.parseInt(value, 10),
+    1024,
+  )
+  .option(
+    "--record-max-minutes <minutes>",
+    "maximum recording duration",
+    (value) => Number.parseInt(value, 10),
+    60,
+  )
   .option("--detach", "run in the background")
   .option("--child", "internal detached child mode")
   .action(async (device, local, command) => {
@@ -215,6 +234,16 @@ program
         "--json",
       ];
       if (local.token) args.push("--token", local.token);
+      if (local.record) {
+        args.push(
+          "--record",
+          resolve(local.record),
+          "--record-max-mb",
+          String(local.recordMaxMb),
+          "--record-max-minutes",
+          String(local.recordMaxMinutes),
+        );
+      }
       const child = spawn(process.execPath, args, {
         detached: true,
         stdio: "ignore",
@@ -233,7 +262,7 @@ program
           output(
             { ...state, token: undefined },
             options,
-            `serve-droid: ${state.url}\nDevice: ${state.device.model ?? state.device.serial}\nToken: ${state.token}`,
+            `serve-droid: ${state.url}\nDevice: ${state.device.model ?? state.device.serial}\nToken: ${state.token}${state.recordingDirectory ? `\nRecording: ${state.recordingDirectory}` : ""}`,
           );
           return;
         }
@@ -248,12 +277,21 @@ program
       host: local.host,
       port: local.port,
       token: local.token,
+      ...(local.record
+        ? {
+            recording: {
+              directory: resolve(local.record),
+              maxBytes: Number(local.recordMaxMb) * 1024 * 1024,
+              maxDurationMs: Number(local.recordMaxMinutes) * 60_000,
+            },
+          }
+        : {}),
     });
     const session = await server.start();
     output(
-      { ...session, token: undefined },
+      { ...session, token: undefined, recording: server.recording },
       options,
-      `serve-droid: ${session.url}\nDevice: ${session.device.model ?? session.device.serial}\nToken: ${server.token}`,
+      `serve-droid: ${session.url}\nDevice: ${session.device.model ?? session.device.serial}\nToken: ${server.token}${server.recording ? `\nRecording: ${server.recording.directory}` : ""}`,
     );
     const stop = () => void server.stop().finally(() => process.exit());
     process.on("SIGINT", stop);
@@ -310,6 +348,32 @@ program
       options,
       `Stopped ${sessions.length} session(s).`,
     );
+  });
+
+const recording = program.command("recording").description("Recover or remove local recordings.");
+
+recording
+  .command("recover <root-directory>")
+  .description("Mark recordings left by dead serve-droid processes as crashed.")
+  .action(async (root, _local, command) => {
+    const options = globalOptions(command);
+    const recovered = await recoverPartialRecordings(resolve(root));
+    output(
+      { schemaVersion: SCHEMA_VERSION, recovered },
+      options,
+      `Recovered ${recovered.length} partial recording(s).`,
+    );
+  });
+
+recording
+  .command("remove <session-directory>")
+  .description("Permanently remove one recognized, inactive serve-droid recording.")
+  .requiredOption("--yes", "confirm permanent removal")
+  .action(async (directory, _local, command) => {
+    const options = globalOptions(command);
+    const target = resolve(directory);
+    await removeRecording(target);
+    output({ schemaVersion: SCHEMA_VERSION, removed: target }, options, `Removed ${target}.`);
   });
 
 program
