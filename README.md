@@ -96,13 +96,17 @@ The MCP surface deliberately provides explicit bounded tools instead of arbitrar
 
 Read [SECURITY.md](SECURITY.md) before binding to a LAN interface.
 
+Short-lived remote access through an existing named Cloudflare Tunnel is available only with
+explicit consent, HTTPS, bearer authentication, and a hard expiry. Read the
+[tunnel threat model and setup guide](docs/tunnels.md) before using it.
+
 ## Supported and deferred
 
 v0.1 targets macOS, Linux, Windows, Android API 26+, local emulators, USB devices, Wi-Fi ADB,
 Chrome, Edge, Safari, and Firefox. Installed AVD lifecycle controls, opt-in bounded local recording,
-the TinyH264 browser fallback, and opt-in device audio for API 30+ are included. Cloud device labs,
-tunnels, accounts, multi-user roles, AVD creation/provisioning, iOS, and arbitrary shell access are
-deferred. See the [browser support matrix](docs/browser-support.md).
+the TinyH264 browser fallback, opt-in device audio for API 30+, and opt-in expiring named-tunnel
+support are included. Cloud device labs, accounts, multi-user roles, AVD creation/provisioning, iOS,
+and arbitrary shell access are deferred. See the [browser support matrix](docs/browser-support.md).
 
 ## Development
 

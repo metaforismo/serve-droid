@@ -7,6 +7,7 @@ import {
   upload,
   type LogEntry,
   type Observation,
+  type RemoteAccess,
   type UiElement,
 } from "./api.js";
 import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
@@ -34,13 +35,16 @@ export function App() {
   const [decoder, setDecoder] = useState<"WebCodecs" | "TinyH264" | "">("");
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioStatus, setAudioStatus] = useState("Audio muted");
+  const [remoteAccess, setRemoteAccess] = useState<RemoteAccess | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const result = await api<Observation>(
-        `/api/v1/observe?logsSince=${observation?.nextLogCursor ?? "0"}`,
-      );
+      const [result, remote] = await Promise.all([
+        api<Observation>(`/api/v1/observe?logsSince=${observation?.nextLogCursor ?? "0"}`),
+        api<RemoteAccess>("/api/v1/remote-access"),
+      ]);
       setObservation(result);
+      setRemoteAccess(remote);
       setLogs((previous) => [...previous, ...result.logs].slice(-1000));
       setStatus(demoMode ? "Demo preview" : "Connected");
       setError("");
@@ -236,6 +240,11 @@ export function App() {
             {status}
           </span>
           {demoMode && <span className="demo-badge">Demo data</span>}
+          {remoteAccess?.active && (
+            <span className="demo-badge" role="status">
+              Remote access · expires {new Date(remoteAccess.expiresAt!).toLocaleTimeString()}
+            </span>
+          )}
           <span>
             {observation?.device.model ?? observation?.device.serial ?? "Waiting for device"}
           </span>

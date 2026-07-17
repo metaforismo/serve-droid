@@ -106,6 +106,65 @@ describe("authenticated HTTP server", () => {
     expect(adb.calls.some((call) => call.includes("tap"))).toBe(false);
   });
 
+  it("authenticates, validates, and revokes visible remote-access state", async () => {
+    const server = new ServeDroidServer(new AndroidService(new FakeAdb(), device), {
+      token: "test-token",
+      videoSource: new FakeVideo(),
+    });
+    servers.push(server);
+    const session = await server.start();
+    const unauthorized = await fetch(`${session.url}/api/v1/remote-access`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ active: false }),
+    });
+    expect(unauthorized.status).toBe(401);
+    const headers = {
+      authorization: "Bearer test-token",
+      "content-type": "application/json",
+    };
+    const activated = await fetch(`${session.url}/api/v1/remote-access`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        active: true,
+        provider: "cloudflare",
+        publicUrl: "https://android.example.test",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    });
+    expect(activated.status).toBe(200);
+    expect(await activated.json()).toMatchObject({ active: true, provider: "cloudflare" });
+    const malformed = await fetch(`${session.url}/api/v1/remote-access`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        active: true,
+        provider: "cloudflare",
+        publicUrl: "https://android.example.test/?token=bad",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    });
+    expect(malformed.status).toBe(400);
+    const invalidUrl = await fetch(`${session.url}/api/v1/remote-access`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        active: true,
+        provider: "cloudflare",
+        publicUrl: "not-a-url",
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    });
+    expect(invalidUrl.status).toBe(400);
+    const revoked = await fetch(`${session.url}/api/v1/remote-access`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ active: false }),
+    });
+    expect(await revoked.json()).toMatchObject({ active: false, publicUrl: null });
+  });
+
   it("records action metadata without typed text, tokens, or Logcat", async () => {
     const root = await mkdtemp(join(tmpdir(), "serve-droid-server-recording-test-"));
     temporaryDirectories.push(root);

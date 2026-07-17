@@ -41,6 +41,14 @@ export interface Observation {
   nextLogCursor: string;
 }
 
+export interface RemoteAccess {
+  schemaVersion: 1;
+  active: boolean;
+  provider: "cloudflare" | null;
+  publicUrl: string | null;
+  expiresAt: string | null;
+}
+
 export async function screenshot(url: string): Promise<Blob> {
   const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`Screenshot request failed (${response.status})`);
