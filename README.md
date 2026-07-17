@@ -23,6 +23,7 @@ is tracked separately in the release checklist._
 - H.264 device streaming and control in a local browser cockpit.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
+- Secure LAN token entry and bounded clipboard paste into the focused Android field.
 - One bounded observation containing the screen, UI hierarchy, foreground app, device state, and
   incremental logs.
 - The same capabilities through CLI, authenticated HTTP/WebSocket APIs, MCP, and an Agent Skill.
@@ -159,6 +160,7 @@ hardware, platform, and publication gates.
 - [x] Ship the shared CLI, HTTP/WebSocket, MCP, Agent Skill, and browser cockpit foundation.
 - [x] Add a reproducible, clearly labeled cockpit screenshot to this README.
 - [x] Add searchable Logcat controls with priority filtering, pause, clear, and copy.
+- [x] Add secure LAN token handoff and bounded browser clipboard controls.
 - [ ] Complete the real-device acceptance matrix on macOS, Linux, and Windows.
 - [ ] Publish and validate the npm release candidate before tagging v0.1.0.
 

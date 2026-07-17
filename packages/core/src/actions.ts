@@ -97,6 +97,15 @@ export class AndroidActions {
 
   public async typeText(text: string): Promise<void> {
     if (!text) throw new ServeDroidError("INVALID_ARGUMENT", "Text must not be empty.");
+    if (text.length > 4096) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "Text must not exceed 4096 characters.");
+    }
+    if (/[^\u0020-\u007e]/u.test(text)) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Direct text injection supports printable ASCII only. Use the device keyboard for Unicode text.",
+      );
+    }
     const escaped = text.replaceAll("%", "%25").replaceAll(" ", "%s");
     await checkedRun(this.adb, ["shell", "input", "text", escaped], { serial: this.serial });
   }

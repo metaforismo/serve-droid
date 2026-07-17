@@ -2,6 +2,8 @@ const fragment = new URLSearchParams(location.hash.replace(/^#/u, ""));
 const token = window.__SERVE_DROID__?.token || fragment.get("token") || "";
 if (fragment.has("token")) history.replaceState(null, "", `${location.pathname}${location.search}`);
 
+export const hasAuthenticationToken = token.length > 0;
+
 export interface Bounds {
   left: number;
   top: number;

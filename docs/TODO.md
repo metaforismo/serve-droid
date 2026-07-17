@@ -74,7 +74,8 @@ because its code path compiles.
 - [x] Scope permission operations to an explicit permission map and package.
 - [ ] Route browser pointer and gesture input through scrcpy control rather than ADB input.
 - [ ] Add two-finger control-channel gesture injection.
-- [ ] Implement clipboard paste and a documented Unicode fallback.
+- [x] Add bounded browser clipboard paste with an explicit printable-ASCII contract and documented
+      device-keyboard fallback for Unicode.
 - [ ] Wait for fresh display metadata after rotation before accepting coordinates.
 - [ ] Detect hierarchy staleness after rotation and foreground-app changes.
 - [ ] Capture agent screenshots from the decoded stream before using ADB fallback.
@@ -94,9 +95,10 @@ because its code path compiles.
 - [x] Keep authenticated control and semantic inspection independent from video decoding.
 - [x] Record same-stream stable-Chrome fallback latency and process-CPU evidence against WebCodecs.
 - [x] Keep bearer tokens out of query strings, server logs, and non-loopback HTML.
-- [ ] Add a LAN token-entry screen and document fragment-based handoff.
+- [x] Add a LAN token-entry screen and document fragment-based handoff.
 - [x] Add priority and combined tag/message Logcat filters plus pause/clear/copy controls.
-- [ ] Add clipboard UI and file-transfer progress events.
+- [x] Add clipboard UI with manual entry and browser Clipboard API loading.
+- [ ] Add file-transfer progress events.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 
 ## CLI, HTTP, MCP, and Agent Skill

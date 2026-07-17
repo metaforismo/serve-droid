@@ -3,6 +3,7 @@ import {
   ArrowCounterClockwise,
   ArrowLeft,
   ArrowsClockwise,
+  ClipboardText,
   Copy,
   DeviceMobile,
   House,
@@ -10,6 +11,7 @@ import {
   Pause,
   Play,
   Power,
+  ShieldCheck,
   SpeakerHigh,
   SpeakerSlash,
   Stack,
@@ -19,6 +21,7 @@ import {
   action,
   api,
   authenticatedWebSocket,
+  hasAuthenticationToken,
   screenshot,
   upload,
   type LogEntry,
@@ -32,12 +35,76 @@ import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
 type Panel = "logs" | "tree";
 type LogPriority = "all" | "V" | "D" | "I" | "W" | "E" | "F";
 const demoMode = new URLSearchParams(location.search).has("demo");
+const loopbackDemoMode = demoMode && ["127.0.0.1", "localhost", "::1"].includes(location.hostname);
 
 function label(element: UiElement): string {
   return element.text || element.contentDescription || element.resourceId || element.className;
 }
 
 export function App() {
+  return hasAuthenticationToken || loopbackDemoMode ? <Cockpit /> : <TokenEntry />;
+}
+
+function TokenEntry() {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+
+  const connect = (event: React.FormEvent) => {
+    event.preventDefault();
+    const token = value.trim();
+    if (!token || token.length > 512 || /\s/u.test(token)) {
+      setError("Enter the session token exactly as it was printed by serve-droid.");
+      return;
+    }
+    const fragment = new URLSearchParams({ token });
+    history.replaceState(null, "", `${location.pathname}${location.search}#${fragment.toString()}`);
+    window.location.reload();
+  };
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card" aria-labelledby="auth-title">
+        <div className="auth-mark" aria-hidden="true">
+          <ShieldCheck />
+        </div>
+        <p className="eyebrow">Protected Android session</p>
+        <h1 id="auth-title">Enter the session token</h1>
+        <p>
+          This cockpit is not running on the same computer. Paste the token shown by the serve-droid
+          host to connect securely.
+        </p>
+        <form onSubmit={connect}>
+          <label htmlFor="session-token">Session token</label>
+          <input
+            id="session-token"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError("");
+            }}
+            placeholder="Paste token"
+            autoFocus
+          />
+          {error && (
+            <span className="auth-error" role="alert">
+              {error}
+            </span>
+          )}
+          <button type="submit">Connect to device</button>
+        </form>
+        <p className="auth-note">
+          The token stays in the URL fragment only long enough to load this page. It is never sent
+          in the HTTP request URL or saved to browser storage.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function Cockpit() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -58,6 +125,9 @@ export function App() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioStatus, setAudioStatus] = useState("Audio muted");
   const [remoteAccess, setRemoteAccess] = useState<RemoteAccess | null>(null);
+  const [clipboardOpen, setClipboardOpen] = useState(false);
+  const [clipboardText, setClipboardText] = useState("");
+  const [clipboardStatus, setClipboardStatus] = useState("Paste text into the focused field");
 
   const refresh = useCallback(async () => {
     try {
@@ -255,6 +325,36 @@ export function App() {
     }
   };
 
+  const readBrowserClipboard = async () => {
+    try {
+      const value = await navigator.clipboard.readText();
+      setClipboardText(value);
+      setClipboardStatus(value ? "Browser clipboard loaded" : "Browser clipboard is empty");
+    } catch (reason) {
+      setClipboardStatus("Clipboard read unavailable. Paste into the box instead.");
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const pasteToDevice = async () => {
+    if (!clipboardText) return;
+    if (/[^\u0020-\u007e]/u.test(clipboardText)) {
+      setClipboardStatus("Direct device paste currently supports printable ASCII only.");
+      return;
+    }
+    try {
+      await action({ type: "type", text: clipboardText });
+      setClipboardStatus(
+        `${clipboardText.length} character${clipboardText.length === 1 ? "" : "s"} sent`,
+      );
+      setClipboardText("");
+      await refresh();
+    } catch (reason) {
+      setClipboardStatus("Device paste failed");
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const tapCanvas = async (event: React.PointerEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     await action({
@@ -392,6 +492,14 @@ export function App() {
               <SpeakerSlash aria-hidden="true" />
             )}
           </button>
+          <button
+            title="Paste text"
+            aria-label="Open device clipboard"
+            aria-expanded={clipboardOpen}
+            onClick={() => setClipboardOpen((value) => !value)}
+          >
+            <ClipboardText aria-hidden="true" />
+          </button>
         </aside>
 
         <div className="stage">
@@ -421,6 +529,33 @@ export function App() {
           <p className="hint">
             {audioStatus} · Drop an APK to install · Drop any other file to push to Downloads
           </p>
+          {clipboardOpen && (
+            <section className="clipboard-card" aria-label="Device clipboard">
+              <div>
+                <strong>Paste to device</strong>
+                <span aria-live="polite">{clipboardStatus}</span>
+              </div>
+              <textarea
+                aria-label="Text to paste into device"
+                placeholder="Paste or type printable ASCII text"
+                value={clipboardText}
+                onChange={(event) => setClipboardText(event.target.value)}
+                rows={3}
+              />
+              <div className="clipboard-actions">
+                <button type="button" onClick={() => void readBrowserClipboard()}>
+                  Load browser clipboard
+                </button>
+                <button
+                  type="button"
+                  disabled={!clipboardText}
+                  onClick={() => void pasteToDevice()}
+                >
+                  Send to focused field
+                </button>
+              </div>
+            </section>
+          )}
         </div>
 
         <aside className="inspector">

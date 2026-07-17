@@ -163,6 +163,20 @@ describe("actions", () => {
     await expect(actions.tap(1.1, 0)).rejects.toBeInstanceOf(ServeDroidError);
     expect(adb.calls).toHaveLength(0);
   });
+
+  it("injects printable ASCII and rejects unsupported Unicode before calling adb", async () => {
+    const adb = new FakeAdb();
+    const actions = new AndroidActions(adb, "serial", async () => ({
+      width: 1,
+      height: 1,
+      density: null,
+      orientation: "portrait",
+    }));
+    await actions.typeText("hello 100%");
+    expect(adb.calls[0]).toEqual(["shell", "input", "text", "hello%s100%25"]);
+    await expect(actions.typeText("ciao 👋")).rejects.toThrow("printable ASCII only");
+    expect(adb.calls).toHaveLength(1);
+  });
 });
 
 describe("public errors", () => {

@@ -31,6 +31,21 @@ fragments in HTTP requests, and the cockpit removes the fragment from browser hi
 Never move the token into a query string. Anyone holding the token has full read and control access
 to that Android session.
 
+Opening a non-loopback cockpit URL without a fragment shows a token-entry screen instead of making
+unauthenticated device requests. Paste the exact token printed by the host. The browser reloads with
+the token in the URL fragment, reads it into memory, and immediately replaces the history entry with
+the fragment-free URL. The token is not written to local storage, session storage, cookies, query
+strings, or application logs.
+
+## Clipboard text
+
+The cockpit clipboard panel can load text from the browser Clipboard API or accept manual text, then
+send it to the currently focused Android field. Direct ADB text injection is bounded to 4096
+printable ASCII characters. Android's built-in `input text` command does not reliably encode Unicode
+across API levels and OEM images, so serve-droid rejects Unicode instead of silently corrupting it.
+For Unicode text, enter it with the device keyboard or an IME already installed and trusted by the
+device owner. serve-droid never installs an input method automatically.
+
 ## Threat model and lifecycle
 
 - Consent is mandatory through `--yes`; there is no detached tunnel mode.
