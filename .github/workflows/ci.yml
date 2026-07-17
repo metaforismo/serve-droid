@@ -45,6 +45,7 @@ jobs:
         with:
           api-level: 35
           arch: x86_64
+          disable-animations: false
           script: pnpm --filter @serve-droid/core test:device
         env:
           SERVE_DROID_DEVICE_TEST: "1"

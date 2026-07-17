@@ -24,6 +24,8 @@ export interface UiElement {
 export interface LogEntry {
   cursor: string;
   timestamp: string;
+  pid: number;
+  tid: number;
   priority: string;
   tag: string;
   message: string;

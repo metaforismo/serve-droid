@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowCounterClockwise,
+  ArrowLeft,
+  ArrowsClockwise,
+  Copy,
+  DeviceMobile,
+  House,
+  MagnifyingGlass,
+  Pause,
+  Play,
+  Power,
+  SpeakerHigh,
+  SpeakerSlash,
+  Stack,
+  Trash,
+} from "@phosphor-icons/react";
+import {
   action,
   api,
   authenticatedWebSocket,
@@ -14,6 +30,7 @@ import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
 import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
 
 type Panel = "logs" | "tree";
+type LogPriority = "all" | "V" | "D" | "I" | "W" | "E" | "F";
 const demoMode = new URLSearchParams(location.search).has("demo");
 
 function label(element: UiElement): string {
@@ -26,6 +43,11 @@ export function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selected, setSelected] = useState<UiElement | null>(null);
   const [panel, setPanel] = useState<Panel>("logs");
+  const [logQuery, setLogQuery] = useState("");
+  const [logPriority, setLogPriority] = useState<LogPriority>("all");
+  const [logsPaused, setLogsPaused] = useState(false);
+  const [pausedLogs, setPausedLogs] = useState<LogEntry[] | null>(null);
+  const [copyStatus, setCopyStatus] = useState("Copy visible logs");
   const [status, setStatus] = useState("Connecting");
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -45,7 +67,11 @@ export function App() {
       ]);
       setObservation(result);
       setRemoteAccess(remote);
-      setLogs((previous) => [...previous, ...result.logs].slice(-1000));
+      setLogs((previous) => {
+        const byCursor = new Map(previous.map((entry) => [entry.cursor, entry]));
+        for (const entry of result.logs) byCursor.set(entry.cursor, entry);
+        return [...byCursor.values()].slice(-1000);
+      });
       setStatus(demoMode ? "Demo preview" : "Connected");
       setError("");
     } catch (reason) {
@@ -186,6 +212,49 @@ export function App() {
     );
   }, [observation?.elements, query]);
 
+  const displayedLogs = pausedLogs ?? logs;
+  const filteredLogs = useMemo(() => {
+    const needle = logQuery.trim().toLocaleLowerCase();
+    return displayedLogs.filter((entry) => {
+      if (logPriority !== "all" && entry.priority !== logPriority) return false;
+      if (!needle) return true;
+      return `${entry.tag} ${entry.message} ${entry.pid ?? ""} ${entry.tid ?? ""}`
+        .toLocaleLowerCase()
+        .includes(needle);
+    });
+  }, [displayedLogs, logPriority, logQuery]);
+
+  const toggleLogsPaused = () => {
+    if (logsPaused) {
+      setPausedLogs(null);
+      setLogsPaused(false);
+    } else {
+      setPausedLogs(logs);
+      setLogsPaused(true);
+    }
+  };
+
+  const clearLogs = () => {
+    setLogs([]);
+    if (logsPaused) setPausedLogs([]);
+  };
+
+  const copyVisibleLogs = async () => {
+    const value = filteredLogs
+      .map(
+        (entry) =>
+          `${entry.timestamp} ${entry.priority}/${entry.tag}(${entry.pid ?? "-"}:${entry.tid ?? "-"}) ${entry.message}`,
+      )
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyStatus(`${filteredLogs.length} log${filteredLogs.length === 1 ? "" : "s"} copied`);
+    } catch (reason) {
+      setCopyStatus("Copy unavailable");
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const tapCanvas = async (event: React.PointerEvent<HTMLCanvasElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     await action({
@@ -270,30 +339,46 @@ export function App() {
 
       <section className="workspace">
         <aside className="toolbar" aria-label="Device controls">
-          <button title="Back" onClick={() => void action({ type: "key", key: "back" })}>
-            ←
+          <button
+            aria-label="Back"
+            title="Back"
+            onClick={() => void action({ type: "key", key: "back" })}
+          >
+            <ArrowLeft aria-hidden="true" />
           </button>
-          <button title="Home" onClick={() => void action({ type: "key", key: "home" })}>
-            ⌂
+          <button
+            aria-label="Home"
+            title="Home"
+            onClick={() => void action({ type: "key", key: "home" })}
+          >
+            <House aria-hidden="true" />
           </button>
-          <button title="Recents" onClick={() => void action({ type: "key", key: "recents" })}>
-            ▣
+          <button
+            aria-label="Recents"
+            title="Recents"
+            onClick={() => void action({ type: "key", key: "recents" })}
+          >
+            <Stack aria-hidden="true" />
           </button>
           <span className="rule" />
           <button
             title="Rotate left"
             onClick={() => void action({ type: "rotate", orientation: "landscape-left" })}
           >
-            ↶
+            <ArrowCounterClockwise aria-hidden="true" />
           </button>
           <button
             title="Portrait"
             onClick={() => void action({ type: "rotate", orientation: "portrait" })}
           >
-            ▯
+            <DeviceMobile aria-hidden="true" />
           </button>
-          <button title="Power" onClick={() => void action({ type: "key", key: "power" })}>
-            ⏻
+          <button
+            aria-label="Power"
+            title="Power"
+            onClick={() => void action({ type: "key", key: "power" })}
+          >
+            <Power aria-hidden="true" />
           </button>
           <button
             title={audioPlaying ? "Mute audio" : "Unmute audio"}
@@ -301,7 +386,11 @@ export function App() {
             aria-pressed={audioPlaying}
             onClick={() => setAudioPlaying((value) => !value)}
           >
-            {audioPlaying ? "🔊" : "🔇"}
+            {audioPlaying ? (
+              <SpeakerHigh aria-hidden="true" />
+            ) : (
+              <SpeakerSlash aria-hidden="true" />
+            )}
           </button>
         </aside>
 
@@ -337,24 +426,84 @@ export function App() {
         <aside className="inspector">
           <div className="tabs" role="tablist">
             <button className={panel === "logs" ? "active" : ""} onClick={() => setPanel("logs")}>
-              Logcat
+              Logcat <em>{logs.length}</em>
             </button>
             <button className={panel === "tree" ? "active" : ""} onClick={() => setPanel("tree")}>
               UI tree <em>{observation?.elements.length ?? 0}</em>
             </button>
           </div>
           {panel === "logs" ? (
-            <div className="logs" aria-live="polite">
-              {logs.length === 0 && <p className="empty">No app logs yet.</p>}
-              {logs.map((entry) => (
-                <div className={`log p-${entry.priority}`} key={entry.cursor}>
-                  <time>{entry.timestamp.slice(11, 23)}</time>
-                  <b>
-                    {entry.priority}/{entry.tag}
-                  </b>
-                  <span>{entry.message}</span>
-                </div>
-              ))}
+            <div className="log-console">
+              <div className="log-tools" aria-label="Logcat controls">
+                <label className="log-search">
+                  <MagnifyingGlass aria-hidden="true" />
+                  <span className="sr-only">Search Logcat</span>
+                  <input
+                    aria-label="Search Logcat"
+                    placeholder="Search tag or message"
+                    value={logQuery}
+                    onChange={(event) => setLogQuery(event.target.value)}
+                  />
+                </label>
+                <label className="priority-filter">
+                  <span className="sr-only">Filter Logcat priority</span>
+                  <select
+                    aria-label="Logcat priority"
+                    value={logPriority}
+                    onChange={(event) => setLogPriority(event.target.value as LogPriority)}
+                  >
+                    <option value="all">All levels</option>
+                    <option value="V">Verbose</option>
+                    <option value="D">Debug</option>
+                    <option value="I">Info</option>
+                    <option value="W">Warning</option>
+                    <option value="E">Error</option>
+                    <option value="F">Fatal</option>
+                  </select>
+                </label>
+                <button
+                  aria-label={logsPaused ? "Resume Logcat" : "Pause Logcat"}
+                  aria-pressed={logsPaused}
+                  title={logsPaused ? "Resume Logcat" : "Pause Logcat"}
+                  onClick={toggleLogsPaused}
+                >
+                  {logsPaused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+                </button>
+                <button aria-label="Clear Logcat" title="Clear Logcat" onClick={clearLogs}>
+                  <Trash aria-hidden="true" />
+                </button>
+                <button
+                  aria-label={copyStatus}
+                  title={copyStatus}
+                  disabled={filteredLogs.length === 0}
+                  onClick={() => void copyVisibleLogs()}
+                >
+                  <Copy aria-hidden="true" />
+                </button>
+              </div>
+              <div className="log-summary" aria-live="polite">
+                <span>
+                  {filteredLogs.length} of {displayedLogs.length} entries
+                </span>
+                <span className={logsPaused ? "paused" : "live"}>
+                  {logsPaused ? "Paused" : "Live"}
+                </span>
+              </div>
+              <div className="logs">
+                {displayedLogs.length === 0 && <p className="empty">Waiting for app logs.</p>}
+                {displayedLogs.length > 0 && filteredLogs.length === 0 && (
+                  <p className="empty">No logs match these filters.</p>
+                )}
+                {filteredLogs.map((entry) => (
+                  <div className={`log p-${entry.priority}`} key={entry.cursor}>
+                    <time>{entry.timestamp.slice(11, 23)}</time>
+                    <b>
+                      {entry.priority}/{entry.tag}
+                    </b>
+                    <span>{entry.message}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="tree">
@@ -389,7 +538,10 @@ export function App() {
       <footer>
         <span>{observation?.foregroundApp.packageName ?? "No foreground app"}</span>
         <span>{observation?.foregroundApp.activity}</span>
-        <button onClick={() => void refresh()}>Refresh observation</button>
+        <button onClick={() => void refresh()}>
+          <ArrowsClockwise aria-hidden="true" />
+          Refresh observation
+        </button>
       </footer>
     </main>
   );

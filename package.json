@@ -50,6 +50,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "screenshot:readme": "pnpm --filter @serve-droid/web build && node scripts/capture-readme-screenshot.mjs",
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:watch": "vitest",

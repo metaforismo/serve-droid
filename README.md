@@ -7,10 +7,25 @@ session to an MCP-compatible coding agent.
 > Status: v0.1 development release. The public API is versioned, but video transport and device
 > compatibility still need validation on the published support matrix.
 
-![serve-droid browser cockpit showing a demo Android fixture, scoped Logcat, and device controls](docs/assets/serve-droid-cockpit.jpg)
+```bash
+npx serve-droid
+# → Browser cockpit at a local authenticated URL
+```
 
-_Browser cockpit with deterministic demo data. This image is not presented as real-device
-validation; hardware evidence is tracked separately in the release checklist._
+![serve-droid browser cockpit showing a demo Android fixture, searchable Logcat console, and device controls](docs/assets/serve-droid-cockpit.jpg)
+
+_Deterministic documentation demo: live device stream, semantic UI tree, filtered Logcat, and
+human controls share the same session. This image is not real-device validation; hardware evidence
+is tracked separately in the release checklist._
+
+## What you get
+
+- H.264 device streaming and control in a local browser cockpit.
+- Exact semantic element targeting that stops on missing or ambiguous matches.
+- Searchable, priority-filtered Logcat with pause, clear, and copy controls.
+- One bounded observation containing the screen, UI hierarchy, foreground app, device state, and
+  incremental logs.
+- The same capabilities through CLI, authenticated HTTP/WebSocket APIs, MCP, and an Agent Skill.
 
 ## Why
 
@@ -143,6 +158,7 @@ hardware, platform, and publication gates.
 - [x] Publish the open repository with protected `main`, CodeQL, Dependabot, and secret scanning.
 - [x] Ship the shared CLI, HTTP/WebSocket, MCP, Agent Skill, and browser cockpit foundation.
 - [x] Add a reproducible, clearly labeled cockpit screenshot to this README.
+- [x] Add searchable Logcat controls with priority filtering, pause, clear, and copy.
 - [ ] Complete the real-device acceptance matrix on macOS, Linux, and Windows.
 - [ ] Publish and validate the npm release candidate before tagging v0.1.0.
 
