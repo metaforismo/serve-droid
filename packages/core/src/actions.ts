@@ -4,6 +4,13 @@ import { checkedRun } from "./adb.js";
 import { ServeDroidError } from "./errors.js";
 import type { DisplayInfo, Gesture } from "./types.js";
 
+const ROTATION_TIMEOUT_MS = 5_000;
+const ROTATION_POLL_MS = 100;
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 function assertCoordinate(value: number, name: string): void {
   if (!Number.isFinite(value) || value < 0 || value > 1) {
     throw new ServeDroidError("INVALID_ARGUMENT", `${name} must be a number between 0 and 1.`);
@@ -130,6 +137,17 @@ export class AndroidActions {
     await checkedRun(this.adb, ["shell", "settings", "put", "system", "user_rotation", value], {
       serial: this.serial,
     });
+    const deadline = Date.now() + ROTATION_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      const display = await this.getDisplay();
+      if (display.orientation === orientation) return;
+      await delay(ROTATION_POLL_MS);
+    }
+    throw new ServeDroidError(
+      "ADB_FAILED",
+      `Device did not report ${orientation} orientation within ${ROTATION_TIMEOUT_MS} ms.`,
+      { orientation, timeoutMs: ROTATION_TIMEOUT_MS },
+    );
   }
 
   public async install(path: string): Promise<void> {

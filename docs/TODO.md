@@ -76,7 +76,7 @@ because its code path compiles.
 - [ ] Add two-finger control-channel gesture injection.
 - [x] Add bounded browser clipboard paste with an explicit printable-ASCII contract and documented
       device-keyboard fallback for Unicode.
-- [ ] Wait for fresh display metadata after rotation before accepting coordinates.
+- [x] Wait for fresh display metadata after rotation before accepting coordinates.
 - [ ] Detect hierarchy staleness after rotation and foreground-app changes.
 - [ ] Capture agent screenshots from the decoded stream before using ADB fallback.
 - [ ] Reset package PID filtering automatically after every app relaunch.

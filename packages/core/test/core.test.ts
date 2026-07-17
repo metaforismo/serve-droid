@@ -1,6 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AndroidActions,
   ServeDroidError,
@@ -140,6 +140,8 @@ describe("logs and foreground state", () => {
 });
 
 describe("actions", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("converts normalized taps to pixels", async () => {
     const adb = new FakeAdb();
     const actions = new AndroidActions(adb, "serial", async () => ({
@@ -176,6 +178,46 @@ describe("actions", () => {
     expect(adb.calls[0]).toEqual(["shell", "input", "text", "hello%s100%25"]);
     await expect(actions.typeText("ciao 👋")).rejects.toThrow("printable ASCII only");
     expect(adb.calls).toHaveLength(1);
+  });
+
+  it("waits for fresh display metadata after rotation", async () => {
+    vi.useFakeTimers();
+    const adb = new FakeAdb();
+    let reads = 0;
+    const actions = new AndroidActions(adb, "serial", async () => ({
+      width: 1000,
+      height: 2000,
+      density: 400,
+      orientation: reads++ === 0 ? "portrait" : "landscape-left",
+    }));
+
+    const rotation = actions.rotate("landscape-left");
+    await vi.advanceTimersByTimeAsync(100);
+    await rotation;
+
+    expect(adb.calls).toEqual([
+      ["shell", "settings", "put", "system", "accelerometer_rotation", "0"],
+      ["shell", "settings", "put", "system", "user_rotation", "1"],
+    ]);
+    expect(reads).toBe(2);
+  });
+
+  it("fails instead of accepting stale coordinates when rotation never settles", async () => {
+    vi.useFakeTimers();
+    const adb = new FakeAdb();
+    const actions = new AndroidActions(adb, "serial", async () => ({
+      width: 1000,
+      height: 2000,
+      density: 400,
+      orientation: "portrait",
+    }));
+
+    const rotation = expect(actions.rotate("landscape-right")).rejects.toMatchObject({
+      code: "ADB_FAILED",
+      details: { orientation: "landscape-right", timeoutMs: 5_000 },
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await rotation;
   });
 });
 
