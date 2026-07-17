@@ -1,0 +1,356 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  color: #f2f4f1;
+  background: #0b0d0c;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 900px;
+  min-height: 100vh;
+  overflow: hidden;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  color: inherit;
+}
+
+.shell {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 56px auto 1fr 38px;
+  background: radial-gradient(circle at 45% 25%, #1b201d 0, #101310 36%, #090b0a 78%);
+}
+.topbar,
+footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-color: #292e2a;
+  background: rgba(13, 16, 14, 0.92);
+  backdrop-filter: blur(16px);
+}
+.topbar {
+  padding: 0 20px;
+  border-bottom: 1px solid #292e2a;
+}
+.brand,
+.device-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand strong {
+  letter-spacing: -0.02em;
+}
+.mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #c7ff4a;
+  color: #142000;
+  font-weight: 900;
+  font-size: 12px;
+}
+.version,
+.device-meta,
+footer {
+  color: #8f9991;
+  font-size: 12px;
+}
+.version {
+  padding: 3px 7px;
+  border: 1px solid #384138;
+  border-radius: 999px;
+}
+.status {
+  color: #c7ff4a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status i {
+  width: 7px;
+  height: 7px;
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 10px currentColor;
+}
+.status.bad {
+  color: #ff6f6f;
+}
+.error {
+  padding: 8px 18px;
+  background: #451b1b;
+  color: #ffc6c6;
+  font-size: 13px;
+}
+.drop-status {
+  position: fixed;
+  z-index: 10;
+  inset: 75px 24px auto;
+  padding: 14px;
+  text-align: center;
+  background: #c7ff4a;
+  color: #152000;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 58px minmax(480px, 1fr) minmax(320px, 34vw);
+}
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 9px;
+  border-right: 1px solid #292e2a;
+  background: #101310;
+}
+.toolbar button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #aeb7af;
+  cursor: pointer;
+  font-size: 18px;
+}
+.toolbar button:hover,
+.toolbar button:focus-visible {
+  background: #232923;
+  border-color: #3a443b;
+  color: #dfff9b;
+  outline: none;
+}
+.rule {
+  width: 28px;
+  height: 1px;
+  margin: 5px 0;
+  background: #303630;
+}
+.stage {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  padding: 24px;
+  overflow: auto;
+}
+.phone {
+  position: relative;
+  max-height: calc(100vh - 150px);
+  aspect-ratio: 9 / 19.5;
+  border: 8px solid #242825;
+  border-radius: 34px;
+  overflow: hidden;
+  background: #020302;
+  box-shadow:
+    0 28px 80px #000b,
+    0 0 0 1px #50574f;
+}
+.phone.landscape {
+  width: min(70vw, 800px);
+  max-height: none;
+  aspect-ratio: 19.5 / 9;
+}
+.phone canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: crosshair;
+  touch-action: none;
+}
+.element-overlay {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid #c7ff4a;
+  background: #c7ff4a22;
+  box-shadow: 0 0 0 1px #101b00;
+}
+.hint {
+  margin: 0;
+  color: #657067;
+  font-size: 11px;
+}
+.inspector {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 49px 1fr;
+  border-left: 1px solid #292e2a;
+  background: #0e110f;
+}
+.tabs {
+  display: flex;
+  border-bottom: 1px solid #292e2a;
+}
+.tabs button {
+  flex: 1;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #737d75;
+  cursor: pointer;
+}
+.tabs button.active {
+  color: #e4e9e4;
+  border-color: #c7ff4a;
+}
+.tabs em {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: #252b26;
+  color: #9aa39b;
+  font-style: normal;
+  font-size: 10px;
+}
+.logs,
+.nodes {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+.log {
+  display: grid;
+  grid-template-columns: 78px minmax(90px, auto) 1fr;
+  gap: 9px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #191d1a;
+  font:
+    11px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.log time {
+  color: #58615a;
+}
+.log b {
+  color: #8d9b90;
+  font-weight: 500;
+}
+.log span {
+  overflow-wrap: anywhere;
+  color: #bdc5be;
+}
+.log.p-E b,
+.log.p-F b {
+  color: #ff7c7c;
+}
+.log.p-W b {
+  color: #ffc96b;
+}
+.log.p-I b {
+  color: #81c7ff;
+}
+.empty {
+  color: #657067;
+  text-align: center;
+  margin-top: 50px;
+}
+.tree {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+.tree input {
+  margin: 12px;
+  padding: 10px 12px;
+  border: 1px solid #343b35;
+  border-radius: 8px;
+  outline: 0;
+  background: #181c19;
+  color: #e0e6e1;
+}
+.tree input:focus {
+  border-color: #9ac835;
+  box-shadow: 0 0 0 3px #9ac83522;
+}
+.nodes button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid #1c211d;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.nodes button:hover,
+.nodes button:focus-visible,
+.nodes button.selected {
+  background: #202721;
+  outline: 0;
+}
+.nodes button.selected {
+  box-shadow: inset 2px 0 #c7ff4a;
+}
+.nodes button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.nodes strong,
+.nodes span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nodes strong {
+  color: #cbd2cc;
+  font-size: 12px;
+}
+.nodes span {
+  margin-top: 3px;
+  color: #626d64;
+  font:
+    10px ui-monospace,
+    monospace;
+}
+footer {
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 0 15px;
+  border-top: 1px solid #292e2a;
+}
+footer button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #9ec84a;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

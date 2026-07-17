@@ -1,0 +1,37 @@
+export type ErrorCode =
+  | "ADB_NOT_FOUND"
+  | "ADB_FAILED"
+  | "DEVICE_NOT_FOUND"
+  | "DEVICE_AMBIGUOUS"
+  | "DEVICE_UNAUTHORIZED"
+  | "DEVICE_OFFLINE"
+  | "UNSUPPORTED_ANDROID"
+  | "INVALID_ARGUMENT"
+  | "ELEMENT_NOT_FOUND"
+  | "ELEMENT_AMBIGUOUS"
+  | "PACKAGE_NOT_FOUND"
+  | "AUTHENTICATION_REQUIRED"
+  | "SESSION_NOT_FOUND"
+  | "TRANSPORT_FAILED";
+
+export class ServeDroidError extends Error {
+  public readonly code: ErrorCode;
+  public readonly details: Record<string, unknown> | undefined;
+
+  public constructor(code: ErrorCode, message: string, details?: Record<string, unknown>) {
+    super(message);
+    this.name = "ServeDroidError";
+    this.code = code;
+    this.details = details;
+  }
+}
+
+export function errorExitCode(error: unknown): number {
+  if (!(error instanceof ServeDroidError)) return 1;
+  if (error.code === "ADB_NOT_FOUND") return 10;
+  if (error.code.startsWith("DEVICE_") || error.code === "UNSUPPORTED_ANDROID") return 20;
+  if (error.code === "INVALID_ARGUMENT") return 30;
+  if (error.code === "AUTHENTICATION_REQUIRED") return 40;
+  if (error.code === "SESSION_NOT_FOUND") return 50;
+  return 1;
+}

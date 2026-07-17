@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/fixture_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:contentDescription="Fixture scroll area"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="serve-droid fixture"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/deep_link_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="No deep link"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/name_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:hint="Enter a name"
+            android:inputType="textPersonName" />
+
+        <Button
+            android:id="@+id/submit_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="Submit fixture form"
+            android:text="Submit" />
+
+        <TextView
+            android:id="@+id/result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Waiting for submission" />
+
+        <CheckBox
+            android:id="@+id/remember_checkbox"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Remember this choice" />
+
+        <Button
+            android:id="@+id/dialog_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open dialog" />
+
+        <Button
+            android:id="@+id/permission_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Request camera permission" />
+
+        <Button
+            android:id="@+id/file_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Open file picker" />
+
+        <Button
+            android:id="@+id/crash_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:contentDescription="Trigger intentional fixture crash"
+            android:text="Trigger crash" />
+
+        <TextView
+            android:id="@+id/scroll_target"
+            android:layout_width="match_parent"
+            android:layout_height="320dp"
+            android:gravity="bottom"
+            android:text="Scroll target reached"
+            android:textSize="20sp" />
+    </LinearLayout>
+</ScrollView>

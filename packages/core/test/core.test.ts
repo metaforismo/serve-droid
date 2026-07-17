@@ -1,0 +1,153 @@
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { describe, expect, it } from "vitest";
+import {
+  AndroidActions,
+  ServeDroidError,
+  findElement,
+  parseDeviceList,
+  parseDisplayInfo,
+  parseForeground,
+  parseLogLine,
+  parseUiHierarchy,
+  selectDevice,
+  type AdbRunner,
+  type DisplayInfo,
+} from "../src/index.js";
+
+class FakeProcess extends EventEmitter {
+  public stdin = new PassThrough();
+  public stdout = new PassThrough();
+  public stderr = new PassThrough();
+  public kill(): boolean {
+    this.emit("close", 0);
+    return true;
+  }
+}
+
+class FakeAdb implements AdbRunner {
+  public calls: string[][] = [];
+  public async run(
+    args: readonly string[],
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    this.calls.push([...args]);
+    return { stdout: "", stderr: "", exitCode: 0 };
+  }
+  public async capture(): Promise<Buffer> {
+    return Buffer.alloc(0);
+  }
+  public spawn(): never {
+    return new FakeProcess() as never;
+  }
+}
+
+describe("device parsing and selection", () => {
+  const output = `List of devices attached
+emulator-5554 device product:sdk_gphone64_arm64 model:sdk_gphone64_arm64 transport_id:1
+R58M offline product:beyond model:Galaxy_S10 transport_id:2
+USB unauthorized transport_id:3
+`;
+
+  it("parses stable adb device fields", () => {
+    expect(parseDeviceList(output)).toEqual([
+      expect.objectContaining({ serial: "emulator-5554", state: "device", kind: "emulator" }),
+      expect.objectContaining({ serial: "R58M", state: "offline", model: "Galaxy S10" }),
+      expect.objectContaining({ serial: "USB", state: "unauthorized" }),
+    ]);
+  });
+
+  it("requires an explicit selector for multiple devices", () => {
+    expect(() => selectDevice(parseDeviceList(output))).toThrowError(
+      expect.objectContaining({ code: "DEVICE_AMBIGUOUS" }),
+    );
+  });
+
+  it("surfaces unauthorized devices", () => {
+    expect(() => selectDevice(parseDeviceList(output), "USB")).toThrowError(
+      expect.objectContaining({ code: "DEVICE_UNAUTHORIZED" }),
+    );
+  });
+});
+
+describe("display and hierarchy", () => {
+  const display: DisplayInfo = { width: 1080, height: 1920, density: 420, orientation: "portrait" };
+
+  it("uses override size and density and parses rotation", () => {
+    expect(
+      parseDisplayInfo(
+        "Physical size: 1080x2400\nOverride size: 1080x1920",
+        "Physical density: 440\nOverride density: 420",
+        "SurfaceOrientation: 1",
+      ),
+    ).toEqual({ ...display, orientation: "landscape-left" });
+  });
+
+  it("normalizes UI bounds and provides stable IDs", () => {
+    const xml = `<?xml version="1.0"?><hierarchy rotation="0"><node index="0" text="" resource-id="root" class="android.widget.FrameLayout" package="dev.test" content-desc="" clickable="false" enabled="true" focusable="false" scrollable="false" selected="false" checked="false" bounds="[0,0][1080,1920]"><node index="0" text="Submit" resource-id="dev.test:id/submit" class="android.widget.Button" package="dev.test" content-desc="Submit form" clickable="true" enabled="true" focusable="true" scrollable="false" selected="false" checked="false" bounds="[270,1440][810,1680]"/></node></hierarchy>`;
+    const first = parseUiHierarchy(xml, display);
+    const second = parseUiHierarchy(xml, display);
+    expect(first).toHaveLength(2);
+    expect(first[1]).toEqual(
+      expect.objectContaining({
+        id: second[1]?.id,
+        parentId: first[0]?.id,
+        text: "Submit",
+        resourceId: "dev.test:id/submit",
+        clickable: true,
+        bounds: { left: 0.25, top: 0.75, right: 0.75, bottom: 0.875 },
+      }),
+    );
+    expect(findElement(first, { text: "Submit" }).id).toBe(first[1]?.id);
+    expect(() => findElement(first, { text: "Missing" })).toThrowError(
+      expect.objectContaining({ code: "ELEMENT_NOT_FOUND" }),
+    );
+  });
+});
+
+describe("logs and foreground state", () => {
+  it("parses logcat threadtime records", () => {
+    expect(parseLogLine("07-17 12:34:56.789  1234  1250 E Fixture: Boom", 7, 2026)).toEqual({
+      cursor: "7",
+      timestamp: "2026-07-17T12:34:56.789Z",
+      pid: 1234,
+      tid: 1250,
+      priority: "E",
+      tag: "Fixture",
+      message: "Boom",
+    });
+  });
+
+  it("parses the resumed Android activity", () => {
+    expect(
+      parseForeground(
+        "mResumedActivity: ActivityRecord{abc u0 dev.servedroid.fixture/.MainActivity t12}",
+      ),
+    ).toEqual({ packageName: "dev.servedroid.fixture", activity: ".MainActivity" });
+  });
+});
+
+describe("actions", () => {
+  it("converts normalized taps to pixels", async () => {
+    const adb = new FakeAdb();
+    const actions = new AndroidActions(adb, "serial", async () => ({
+      width: 1000,
+      height: 2000,
+      density: 400,
+      orientation: "portrait",
+    }));
+    await actions.tap(0.25, 0.75);
+    expect(adb.calls[0]).toEqual(["shell", "input", "tap", "250", "1500"]);
+  });
+
+  it("rejects invalid coordinates before calling adb", async () => {
+    const adb = new FakeAdb();
+    const actions = new AndroidActions(adb, "serial", async () => ({
+      width: 1,
+      height: 1,
+      density: null,
+      orientation: "portrait",
+    }));
+    await expect(actions.tap(1.1, 0)).rejects.toBeInstanceOf(ServeDroidError);
+    expect(adb.calls).toHaveLength(0);
+  });
+});

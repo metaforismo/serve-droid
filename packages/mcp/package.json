@@ -1,0 +1,21 @@
+{
+  "name": "@serve-droid/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@serve-droid/core": "workspace:*",
+    "@serve-droid/server": "workspace:*",
+    "zod": "^4.3.5"
+  }
+}
