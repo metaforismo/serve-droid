@@ -3,6 +3,7 @@ import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AndroidActions,
+  AndroidService,
   ServeDroidError,
   errorExitCode,
   findElement,
@@ -14,6 +15,7 @@ import {
   selectDevice,
   type AdbRunner,
   type DisplayInfo,
+  type DeviceSummary,
 } from "../src/index.js";
 
 class FakeProcess extends EventEmitter {
@@ -41,6 +43,61 @@ class FakeAdb implements AdbRunner {
     return new FakeProcess() as never;
   }
 }
+
+class HierarchyAdb extends FakeAdb {
+  public dumps = 0;
+
+  public constructor(
+    private readonly foregroundPackages: string[],
+    private readonly hierarchyPackages: string[],
+  ) {
+    super();
+  }
+
+  public override async run(
+    args: readonly string[],
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    this.calls.push([...args]);
+    const command = args.join(" ");
+    if (command === "shell wm size")
+      return { stdout: "Physical size: 1080x1920", stderr: "", exitCode: 0 };
+    if (command === "shell wm density")
+      return { stdout: "Physical density: 420", stderr: "", exitCode: 0 };
+    if (command === "shell dumpsys input")
+      return { stdout: "SurfaceOrientation: 0", stderr: "", exitCode: 0 };
+    if (command === "shell dumpsys activity activities") {
+      const packageName = this.foregroundPackages.shift() ?? "dev.new";
+      return {
+        stdout: `mResumedActivity: ActivityRecord{a u0 ${packageName}/.MainActivity t1}`,
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (args[0] === "shell" && args[1] === "pidof") {
+      return { stdout: args[2] === "dev.old" ? "101" : "202", stderr: "", exitCode: 0 };
+    }
+    if (command === "exec-out uiautomator dump /dev/tty") {
+      const packageName = this.hierarchyPackages[this.dumps++] ?? "dev.new";
+      return {
+        stdout: `<?xml version="1.0"?><hierarchy rotation="0"><node text="Ready" resource-id="${packageName}:id/root" class="android.view.View" package="${packageName}" content-desc="" clickable="false" enabled="true" focusable="false" scrollable="false" selected="false" checked="false" bounds="[0,0][1080,1920]"/></hierarchy>`,
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return { stdout: "", stderr: "", exitCode: 0 };
+  }
+}
+
+const testDevice: DeviceSummary = {
+  serial: "emulator-5554",
+  state: "device",
+  kind: "emulator",
+  model: "Pixel",
+  product: "sdk",
+  manufacturer: "Google",
+  apiLevel: 35,
+  abi: "x86_64",
+};
 
 describe("device parsing and selection", () => {
   const output = `List of devices attached
@@ -102,6 +159,45 @@ describe("display and hierarchy", () => {
     expect(() => findElement(first, { text: "Missing" })).toThrowError(
       expect.objectContaining({ code: "ELEMENT_NOT_FOUND" }),
     );
+  });
+
+  it("retries a hierarchy captured across a foreground-app change", async () => {
+    const adb = new HierarchyAdb(
+      ["dev.old", "dev.new", "dev.new", "dev.new"],
+      ["dev.old", "dev.new"],
+    );
+    const observation = await new AndroidService(adb, testDevice).observe();
+
+    expect(adb.dumps).toBe(2);
+    expect(observation.foregroundApp).toMatchObject({ packageName: "dev.new", pid: 202 });
+    expect(observation.elements).toEqual([
+      expect.objectContaining({ packageName: "dev.new", resourceId: "dev.new:id/root" }),
+    ]);
+  });
+
+  it("retries a hierarchy whose package lags behind a stable foreground app", async () => {
+    const adb = new HierarchyAdb(
+      ["dev.new", "dev.new", "dev.new", "dev.new"],
+      ["dev.old", "dev.new"],
+    );
+
+    const elements = await new AndroidService(adb, testDevice).tree();
+
+    expect(adb.dumps).toBe(2);
+    expect(elements[0]).toMatchObject({ packageName: "dev.new" });
+  });
+
+  it("rejects a hierarchy when the foreground context never stabilizes", async () => {
+    const adb = new HierarchyAdb(
+      ["dev.one", "dev.two", "dev.three", "dev.four"],
+      ["dev.one", "dev.three"],
+    );
+
+    await expect(new AndroidService(adb, testDevice).tree()).rejects.toMatchObject({
+      code: "TRANSPORT_FAILED",
+      details: { attempts: 2 },
+    });
+    expect(adb.dumps).toBe(2);
   });
 });
 
