@@ -5,6 +5,7 @@ import {
   ArrowsClockwise,
   ClipboardText,
   Copy,
+  CursorClick,
   DeviceMobile,
   House,
   MagnifyingGlass,
@@ -17,6 +18,7 @@ import {
   Stack,
   Trash,
   UploadSimple,
+  X,
 } from "@phosphor-icons/react";
 import {
   action,
@@ -36,6 +38,13 @@ import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
 
 type Panel = "logs" | "tree";
 type LogPriority = "all" | "V" | "D" | "I" | "W" | "E" | "F";
+interface PointerGesture {
+  pointerId: number;
+  startedAt: number;
+  startX: number;
+  startY: number;
+}
+
 const demoMode = new URLSearchParams(location.search).has("demo");
 const loopbackDemoMode = demoMode && ["127.0.0.1", "localhost", "::1"].includes(location.hostname);
 
@@ -109,6 +118,7 @@ function TokenEntry() {
 function Cockpit() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const pointerGesture = useRef<PointerGesture | null>(null);
   const [observation, setObservation] = useState<Observation | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selected, setSelected] = useState<UiElement | null>(null);
@@ -138,6 +148,12 @@ function Cockpit() {
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [clipboardText, setClipboardText] = useState("");
   const [clipboardStatus, setClipboardStatus] = useState("Paste text into the focused field");
+  const [inputStatus, setInputStatus] = useState("Click to tap · drag to swipe");
+  const [pointerPreview, setPointerPreview] = useState<{
+    x: number;
+    y: number;
+    dragging: boolean;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -371,14 +387,101 @@ function Cockpit() {
     }
   };
 
-  const tapCanvas = async (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const runDeviceAction = async (body: Record<string, unknown>, success: string) => {
+    try {
+      setError("");
+      await action(body);
+      setInputStatus(success);
+      await refresh();
+    } catch (reason) {
+      setInputStatus("Device action failed");
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const pointerPoint = (event: React.PointerEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    await action({
-      type: "tap",
-      x: (event.clientX - bounds.left) / bounds.width,
-      y: (event.clientY - bounds.top) / bounds.height,
-    });
-    await refresh();
+    return {
+      x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+      y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+    };
+  };
+
+  const startPointerGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) return;
+    const point = pointerPoint(event);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pointerGesture.current = {
+      pointerId: event.pointerId,
+      startedAt: performance.now(),
+      startX: point.x,
+      startY: point.y,
+    };
+    setPointerPreview({ ...point, dragging: false });
+    setInputStatus("Touch held");
+  };
+
+  const movePointerGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const gesture = pointerGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    const point = pointerPoint(event);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const distance = Math.hypot(
+      (point.x - gesture.startX) * bounds.width,
+      (point.y - gesture.startY) * bounds.height,
+    );
+    setPointerPreview({ ...point, dragging: distance >= 10 });
+    setInputStatus(distance >= 10 ? "Release to swipe" : "Release to tap");
+  };
+
+  const finishPointerGesture = async (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const gesture = pointerGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    pointerGesture.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    const point = pointerPoint(event);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const distance = Math.hypot(
+      (point.x - gesture.startX) * bounds.width,
+      (point.y - gesture.startY) * bounds.height,
+    );
+    try {
+      if (distance < 10) {
+        setInputStatus("Sending tap…");
+        await action({ type: "tap", x: point.x, y: point.y });
+        setInputStatus("Tap sent");
+      } else {
+        const durationMs = Math.min(
+          3_000,
+          Math.max(50, Math.round(performance.now() - gesture.startedAt)),
+        );
+        setInputStatus("Sending swipe…");
+        await action({
+          type: "swipe",
+          x1: gesture.startX,
+          y1: gesture.startY,
+          x2: point.x,
+          y2: point.y,
+          durationMs,
+        });
+        setInputStatus("Swipe sent");
+      }
+      await refresh();
+    } catch (reason) {
+      setInputStatus("Input failed");
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setPointerPreview(null);
+    }
+  };
+
+  const cancelPointerGesture = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pointerGesture.current?.pointerId !== event.pointerId) return;
+    pointerGesture.current = null;
+    setPointerPreview(null);
+    setInputStatus("Gesture cancelled");
   };
 
   const tapElement = async (element: UiElement) => {
@@ -463,7 +566,16 @@ function Cockpit() {
 
       {error && (
         <div className="error" role="alert">
-          {error}
+          <div>
+            <strong>Connection needs attention</strong>
+            <span>{error}</span>
+          </div>
+          <button type="button" onClick={() => void refresh()}>
+            Retry
+          </button>
+          <button type="button" aria-label="Dismiss error" onClick={() => setError("")}>
+            <X aria-hidden="true" />
+          </button>
         </div>
       )}
       {transfer && (
@@ -497,78 +609,146 @@ function Cockpit() {
       )}
 
       <section className="workspace">
-        <aside className="toolbar" aria-label="Device controls">
-          <button
-            aria-label="Back"
-            title="Back"
-            onClick={() => void action({ type: "key", key: "back" })}
-          >
-            <ArrowLeft aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Home"
-            title="Home"
-            onClick={() => void action({ type: "key", key: "home" })}
-          >
-            <House aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Recents"
-            title="Recents"
-            onClick={() => void action({ type: "key", key: "recents" })}
-          >
-            <Stack aria-hidden="true" />
-          </button>
-          <span className="rule" />
-          <button
-            title="Rotate left"
-            onClick={() => void action({ type: "rotate", orientation: "landscape-left" })}
-          >
-            <ArrowCounterClockwise aria-hidden="true" />
-          </button>
-          <button
-            title="Portrait"
-            onClick={() => void action({ type: "rotate", orientation: "portrait" })}
-          >
-            <DeviceMobile aria-hidden="true" />
-          </button>
-          <button
-            aria-label="Power"
-            title="Power"
-            onClick={() => void action({ type: "key", key: "power" })}
-          >
-            <Power aria-hidden="true" />
-          </button>
-          <button
-            title={audioPlaying ? "Mute audio" : "Unmute audio"}
-            aria-label={audioPlaying ? "Mute device audio" : "Unmute device audio"}
-            aria-pressed={audioPlaying}
-            onClick={() => setAudioPlaying((value) => !value)}
-          >
-            {audioPlaying ? (
-              <SpeakerHigh aria-hidden="true" />
-            ) : (
-              <SpeakerSlash aria-hidden="true" />
-            )}
-          </button>
-          <button
-            title="Paste text"
-            aria-label="Open device clipboard"
-            aria-expanded={clipboardOpen}
-            onClick={() => setClipboardOpen((value) => !value)}
-          >
-            <ClipboardText aria-hidden="true" />
-          </button>
-          <button
-            title="Upload APK or file"
-            aria-label="Upload APK or file"
-            onClick={() => fileInput.current?.click()}
-          >
-            <UploadSimple aria-hidden="true" />
-          </button>
+        <aside className="device-sidebar" aria-label="Device controls">
+          <div className="sidebar-heading">
+            <span>Device</span>
+            <strong>Active session</strong>
+          </div>
+          <article className="device-card">
+            <span className="device-icon" aria-hidden="true">
+              <DeviceMobile />
+            </span>
+            <div>
+              <strong>{observation?.device.model ?? "Waiting for device"}</strong>
+              <span>{observation?.device.serial ?? "ADB session starting"}</span>
+            </div>
+            <i className={error ? "offline" : ""} aria-hidden="true" />
+          </article>
+          <dl className="device-facts">
+            <div>
+              <dt>Android</dt>
+              <dd>{observation ? `API ${observation.device.apiLevel}` : "—"}</dd>
+            </div>
+            <div>
+              <dt>Display</dt>
+              <dd>
+                {observation ? `${observation.display.width}×${observation.display.height}` : "—"}
+              </dd>
+            </div>
+          </dl>
+          <section className="control-group">
+            <h2>Navigation</h2>
+            <div className="control-grid">
+              <button
+                title="Back"
+                aria-label="Back"
+                onClick={() => void runDeviceAction({ type: "key", key: "back" }, "Back sent")}
+              >
+                <ArrowLeft aria-hidden="true" />
+                <span>Back</span>
+              </button>
+              <button
+                title="Home"
+                aria-label="Home"
+                onClick={() => void runDeviceAction({ type: "key", key: "home" }, "Home sent")}
+              >
+                <House aria-hidden="true" />
+                <span>Home</span>
+              </button>
+              <button
+                title="Recents"
+                aria-label="Recents"
+                onClick={() =>
+                  void runDeviceAction({ type: "key", key: "recents" }, "Recents sent")
+                }
+              >
+                <Stack aria-hidden="true" />
+                <span>Recents</span>
+              </button>
+              <button
+                title="Power"
+                aria-label="Power"
+                onClick={() => void runDeviceAction({ type: "key", key: "power" }, "Power sent")}
+              >
+                <Power aria-hidden="true" />
+                <span>Power</span>
+              </button>
+            </div>
+          </section>
+          <section className="control-group">
+            <h2>Device tools</h2>
+            <div className="control-grid">
+              <button
+                title="Rotate left"
+                aria-label="Rotate left"
+                onClick={() =>
+                  void runDeviceAction(
+                    { type: "rotate", orientation: "landscape-left" },
+                    "Landscape requested",
+                  )
+                }
+              >
+                <ArrowCounterClockwise aria-hidden="true" />
+                <span>Rotate</span>
+              </button>
+              <button
+                title="Portrait"
+                aria-label="Portrait"
+                onClick={() =>
+                  void runDeviceAction(
+                    { type: "rotate", orientation: "portrait" },
+                    "Portrait requested",
+                  )
+                }
+              >
+                <DeviceMobile aria-hidden="true" />
+                <span>Portrait</span>
+              </button>
+              <button
+                title={audioPlaying ? "Mute audio" : "Unmute audio"}
+                aria-label={audioPlaying ? "Mute device audio" : "Unmute device audio"}
+                aria-pressed={audioPlaying}
+                onClick={() => setAudioPlaying((value) => !value)}
+              >
+                {audioPlaying ? (
+                  <SpeakerHigh aria-hidden="true" />
+                ) : (
+                  <SpeakerSlash aria-hidden="true" />
+                )}
+                <span>Audio</span>
+              </button>
+              <button
+                title="Paste text"
+                aria-label="Open device clipboard"
+                aria-expanded={clipboardOpen}
+                onClick={() => setClipboardOpen((value) => !value)}
+              >
+                <ClipboardText aria-hidden="true" />
+                <span>Paste</span>
+              </button>
+              <button
+                className="wide-control"
+                title="Upload APK or file"
+                aria-label="Upload APK or file"
+                onClick={() => fileInput.current?.click()}
+              >
+                <UploadSimple aria-hidden="true" />
+                <span>Install APK or push file</span>
+              </button>
+            </div>
+          </section>
+          <p className="sidebar-footnote">
+            <CursorClick aria-hidden="true" /> Pointer input uses normalized device coordinates.
+          </p>
         </aside>
 
         <div className="stage">
+          <div className="stage-session" aria-live="polite">
+            <span>
+              <i /> {status}
+            </span>
+            <strong>{observation?.device.model ?? "Android device"}</strong>
+          </div>
           <div
             className={`phone ${observation?.display.orientation !== "portrait" ? "landscape" : ""}`}
           >
@@ -577,9 +757,18 @@ function Cockpit() {
             )}
             <canvas
               ref={canvas}
-              aria-label="Live Android device. Click to tap."
-              onPointerUp={(event) => void tapCanvas(event)}
+              aria-label="Live Android device. Click to tap or drag to swipe."
+              onPointerDown={startPointerGesture}
+              onPointerMove={movePointerGesture}
+              onPointerUp={(event) => void finishPointerGesture(event)}
+              onPointerCancel={cancelPointerGesture}
             />
+            {pointerPreview && (
+              <span
+                className={`touch-indicator ${pointerPreview.dragging ? "dragging" : ""}`}
+                style={{ left: `${pointerPreview.x * 100}%`, top: `${pointerPreview.y * 100}%` }}
+              />
+            )}
             {selected && (
               <div
                 className="element-overlay"
@@ -592,9 +781,13 @@ function Cockpit() {
               />
             )}
           </div>
-          <p className="hint">
-            {audioStatus} · Drop an APK to install · Drop any other file to push to Downloads
-          </p>
+          <div className="stage-hints">
+            <span>
+              <CursorClick aria-hidden="true" /> {inputStatus}
+            </span>
+            <span>{audioStatus}</span>
+            <span>Drop APK or files anywhere</span>
+          </div>
           {clipboardOpen && (
             <section className="clipboard-card" aria-label="Device clipboard">
               <div>
@@ -625,11 +818,28 @@ function Cockpit() {
         </div>
 
         <aside className="inspector">
+          <div className="inspector-heading">
+            <div>
+              <span>Inspector</span>
+              <strong>Agent context</strong>
+            </div>
+            <small>{panel === "logs" ? "Live Logcat" : "Semantic UI"}</small>
+          </div>
           <div className="tabs" role="tablist">
-            <button className={panel === "logs" ? "active" : ""} onClick={() => setPanel("logs")}>
+            <button
+              role="tab"
+              aria-selected={panel === "logs"}
+              className={panel === "logs" ? "active" : ""}
+              onClick={() => setPanel("logs")}
+            >
               Logcat <em>{logs.length}</em>
             </button>
-            <button className={panel === "tree" ? "active" : ""} onClick={() => setPanel("tree")}>
+            <button
+              role="tab"
+              aria-selected={panel === "tree"}
+              className={panel === "tree" ? "active" : ""}
+              onClick={() => setPanel("tree")}
+            >
               UI tree <em>{observation?.elements.length ?? 0}</em>
             </button>
           </div>

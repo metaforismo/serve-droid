@@ -84,7 +84,7 @@ try {
     });
   });
   await page.goto(`http://127.0.0.1:${port}/?demo=1`);
-  await page.getByText("Demo preview", { exact: true }).waitFor();
+  await page.locator("header").getByText("Demo preview", { exact: true }).waitFor();
   await page.locator(".phone img").waitFor();
   await page.getByText("Session attached to Pixel 9 Pro", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Open device clipboard" }).click();
