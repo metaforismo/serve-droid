@@ -12,11 +12,12 @@ npx serve-droid
 # → Browser cockpit at a local authenticated URL
 ```
 
-![serve-droid browser cockpit showing a demo Android fixture, searchable Logcat console, and device controls](docs/assets/serve-droid-cockpit.jpg)
+![serve-droid browser cockpit with an active Android device, direct controls, file install progress, clipboard paste, and searchable Logcat](docs/assets/serve-droid-cockpit.jpg)
 
-_Deterministic documentation demo: live device stream, semantic UI tree, filtered Logcat, and
-human controls share the same session. This image is not real-device validation; hardware evidence
-is tracked separately in the release checklist._
+_One shared session: active-device controls on the left, the live Android surface in the center,
+and agent context such as filtered Logcat or the semantic UI tree on the right. The deterministic
+demo also exercises authenticated file install and clipboard flows. It is not real-device
+validation; hardware evidence is tracked separately in the release checklist._
 
 ## What you get
 
