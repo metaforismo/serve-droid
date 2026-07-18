@@ -648,7 +648,7 @@ footer {
 }
 .phone {
   position: relative;
-  max-height: calc(100dvh - 200px);
+  height: min(620px, calc(100dvh - 200px));
   aspect-ratio: 9 / 19.5;
   border: 7px solid #242825;
   border-radius: 36px;
@@ -662,7 +662,7 @@ footer {
 }
 .phone.landscape {
   width: min(70vw, 800px);
-  max-height: none;
+  height: auto;
   aspect-ratio: 19.5 / 9;
 }
 .phone img,
