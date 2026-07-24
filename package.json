@@ -68,10 +68,10 @@
     "@types/node": "^26.1.1",
     "eslint": "^10.7.0",
     "esbuild": "^0.28.1",
-    "prettier": "^3.7.4",
+    "prettier": "^3.9.6",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.53.0",
+    "typescript": "^7.0.2",
+    "typescript-eslint": "^8.65.0",
     "vitest": "^4.0.17"
   }
 }
