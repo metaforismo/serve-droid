@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@serve-droid/core": "workspace:*",
     "@serve-droid/server": "workspace:*",
     "zod": "^4.3.5"
