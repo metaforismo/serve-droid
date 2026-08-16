@@ -23,6 +23,8 @@ validation; hardware evidence is tracked separately in the release checklist._
 
 - H.264 device streaming in a responsive browser cockpit with click-to-tap and drag-to-swipe
   controls.
+- One-click screenshot capture from the decoded live frame, with an authenticated device fallback,
+  preview, download, and supported-browser clipboard actions.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
 - Secure LAN token entry and bounded clipboard paste into the focused Android field.
@@ -36,6 +38,12 @@ validation; hardware evidence is tracked separately in the release checklist._
 Android Studio mirrors devices, scrcpy provides excellent native display/control, and Maestro is a
 strong test automation system. serve-droid focuses on a different loop: a human and an AI agent
 sharing one observable browser session during development and debugging.
+
+## Inspiration
+
+The browser-first cockpit direction was inspired by Evan Bacon's
+[serve-sim](https://github.com/EvanBacon/serve-sim). serve-droid is an independent Android-focused
+implementation built around ADB, scrcpy transport, Logcat, semantic observations, and MCP.
 
 ## Requirements
 

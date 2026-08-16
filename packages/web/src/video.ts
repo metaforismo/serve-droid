@@ -1,4 +1,5 @@
 import type { TinyH264Decoder } from "@yume-chan/scrcpy-decoder-tinyh264";
+import { markScreenshotFrame, registerScreenshotCanvas } from "./screenshot.js";
 
 interface DecoderOptions {
   canvas: HTMLCanvasElement;
@@ -165,7 +166,39 @@ class TinyH264CanvasPlayer implements CanvasPlayer {
 }
 
 export async function createH264CanvasPlayer(options: DecoderOptions): Promise<CanvasPlayer> {
-  if (typeof VideoDecoder !== "undefined") return new H264CanvasPlayer(options);
+  const releaseScreenshotCanvas = registerScreenshotCanvas(options.canvas);
+  const trackedOptions: DecoderOptions = {
+    ...options,
+    onFrame: () => {
+      markScreenshotFrame(options.canvas);
+      options.onFrame();
+    },
+  };
+  try {
+    const player =
+      typeof VideoDecoder !== "undefined"
+        ? new H264CanvasPlayer(trackedOptions)
+        : await createTinyH264CanvasPlayer(trackedOptions);
+    let closed = false;
+    return {
+      backend: player.backend,
+      push(chunk) {
+        if (!closed) player.push(chunk);
+      },
+      close() {
+        if (closed) return;
+        closed = true;
+        releaseScreenshotCanvas();
+        player.close();
+      },
+    };
+  } catch (error) {
+    releaseScreenshotCanvas();
+    throw error;
+  }
+}
+
+async function createTinyH264CanvasPlayer(options: DecoderOptions): Promise<CanvasPlayer> {
   if (!("WebAssembly" in window) || !("Worker" in window)) {
     throw new Error(
       "Video decoding requires WebCodecs or a browser with WebAssembly and Web Workers.",
