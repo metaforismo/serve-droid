@@ -13,3 +13,7 @@ serve-droid is not a replacement for these tools. It packages the development fe
 leave fragmented. Its browser-first cockpit direction was inspired by
 [serve-sim](https://github.com/EvanBacon/serve-sim), while the implementation and Android control
 plane are independent.
+
+`serve-sim` can forward native simulator HID scroll events. serve-droid currently coalesces browser
+wheel and trackpad input into bounded Android swipes; moving browser gestures onto the scrcpy
+control channel remains a separately tracked transport improvement.
