@@ -16,6 +16,10 @@ function fakeCanvas(blob: Blob | null, width = 1080, height = 2400): HTMLCanvasE
   } as unknown as HTMLCanvasElement;
 }
 
+function deviceFallback(): Promise<Blob> {
+  return Promise.resolve(new Blob(["device"], { type: "image/jpeg" }));
+}
+
 let release: () => void = () => undefined;
 
 afterEach(() => {
@@ -28,7 +32,7 @@ describe("browser screenshot capture", () => {
     const canvas = fakeCanvas(new Blob(["stream"], { type: "image/png" }));
     release = registerScreenshotCanvas(canvas);
     markScreenshotFrame(canvas);
-    const fallback = vi.fn(async () => new Blob(["device"], { type: "image/jpeg" }));
+    const fallback = vi.fn(deviceFallback);
 
     const result = await captureScreenshot(fallback, () => new Date("2026-08-16T21:30:00.000Z"));
 
@@ -41,7 +45,7 @@ describe("browser screenshot capture", () => {
 
   it("uses the authenticated device fallback before the first decoded frame", async () => {
     release = registerScreenshotCanvas(fakeCanvas(new Blob(["stream"], { type: "image/png" })));
-    const fallback = vi.fn(async () => new Blob(["device"], { type: "image/jpeg" }));
+    const fallback = vi.fn(deviceFallback);
 
     const result = await captureScreenshot(fallback);
 
@@ -56,7 +60,7 @@ describe("browser screenshot capture", () => {
     const canvas = fakeCanvas(null);
     release = registerScreenshotCanvas(canvas);
     markScreenshotFrame(canvas);
-    const fallback = vi.fn(async () => new Blob(["device"], { type: "image/jpeg" }));
+    const fallback = vi.fn(deviceFallback);
 
     const result = await captureScreenshot(fallback);
 
