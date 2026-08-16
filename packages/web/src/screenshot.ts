@@ -46,11 +46,7 @@ export async function captureScreenshot(
 ): Promise<CapturedScreenshot> {
   const target = captureTarget;
   const capturedAt = now().toISOString();
-  if (
-    target?.frameReady &&
-    target.canvas.width > 0 &&
-    target.canvas.height > 0
-  ) {
+  if (target?.frameReady && target.canvas.width > 0 && target.canvas.height > 0) {
     try {
       return {
         blob: await canvasPng(target.canvas),
@@ -74,7 +70,9 @@ export async function captureScreenshot(
   };
 }
 
-export function screenshotFileName(capture: Pick<CapturedScreenshot, "blob" | "capturedAt">): string {
+export function screenshotFileName(
+  capture: Pick<CapturedScreenshot, "blob" | "capturedAt">,
+): string {
   const extension = capture.blob.type === "image/jpeg" ? "jpg" : "png";
   const timestamp = capture.capturedAt.replace(/[:.]/gu, "-");
   return `serve-droid-screenshot-${timestamp}.${extension}`;

@@ -16,7 +16,7 @@ function fakeCanvas(blob: Blob | null, width = 1080, height = 2400): HTMLCanvasE
   } as unknown as HTMLCanvasElement;
 }
 
-let release = () => undefined;
+let release: () => void = () => undefined;
 
 afterEach(() => {
   release();
