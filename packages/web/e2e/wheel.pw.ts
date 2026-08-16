@@ -59,7 +59,9 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
   );
 
   await page.goto("/?demo");
-  await expect(page.getByLabel("Live Android device. Click to tap or drag to swipe.")).toBeVisible();
+  await expect(
+    page.getByLabel("Live Android device. Click to tap or drag to swipe."),
+  ).toBeVisible();
 }
 
 test("coalesces a trackpad burst into one bounded Android swipe", async ({ page }) => {
