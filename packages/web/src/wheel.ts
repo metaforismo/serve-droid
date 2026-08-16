@@ -46,11 +46,7 @@ function fitAxis(anchor: number, travel: number): [number, number] {
   return [clamp(start, minimum, maximum), clamp(end, minimum, maximum)];
 }
 
-export function wheelDeltaToPixels(
-  delta: number,
-  deltaMode: number,
-  axisLengthPx: number,
-): number {
+export function wheelDeltaToPixels(delta: number, deltaMode: number, axisLengthPx: number): number {
   if (!Number.isFinite(delta)) return 0;
   const safeAxis = Number.isFinite(axisLengthPx) && axisLengthPx > 0 ? axisLengthPx : 1;
   if (deltaMode === 1) return delta * LINE_HEIGHT_PX;
