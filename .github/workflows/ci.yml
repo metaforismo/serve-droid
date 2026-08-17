@@ -30,6 +30,24 @@ jobs:
       - run: pnpm verify
       - run: pnpm pack
 
+  android-fixture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/wrapper-validation@v6
+      - name: Build Android fixture APK
+        working-directory: fixtures/android-test-app
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify fixture APK artifact
+        shell: bash
+        run: |
+          test -s fixtures/android-test-app/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum fixtures/android-test-app/app/build/outputs/apk/debug/app-debug.apk
+
   android-emulator:
     runs-on: ubuntu-latest
     steps:
