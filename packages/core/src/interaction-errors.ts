@@ -190,16 +190,20 @@ export async function readKeyguardDiagnostics(
   ];
 
   for (const args of commands) {
-    const result = await adb.run(args, {
-      serial,
-      timeoutMs: KEYGUARD_DIAGNOSTIC_TIMEOUT_MS,
-    });
-    if (result.exitCode !== 0) continue;
-    diagnostics = mergeKeyguardDiagnostics(
-      diagnostics,
-      parseKeyguardDiagnostics(`${result.stdout}\n${result.stderr}`),
-    );
-    if (diagnostics.locked !== null && diagnostics.evidence.length > 0) break;
+    try {
+      const result = await adb.run(args, {
+        serial,
+        timeoutMs: KEYGUARD_DIAGNOSTIC_TIMEOUT_MS,
+      });
+      if (result.exitCode !== 0) continue;
+      diagnostics = mergeKeyguardDiagnostics(
+        diagnostics,
+        parseKeyguardDiagnostics(`${result.stdout}\n${result.stderr}`),
+      );
+      if (diagnostics.locked !== null && diagnostics.evidence.length > 0) break;
+    } catch {
+      // Diagnostics are best-effort and must never replace the original interaction failure.
+    }
   }
   return diagnostics;
 }
@@ -319,7 +323,12 @@ export async function runInteractionCommand(
     options.timeoutMs === undefined
       ? { serial: options.serial }
       : { serial: options.serial, timeoutMs: options.timeoutMs };
-  const result = await adb.run(args, runOptions);
+  let result: RunResult;
+  try {
+    result = await adb.run(args, runOptions);
+  } catch (error) {
+    throw await diagnoseInteractionError(adb, options.serial, options.operation, error);
+  }
   if (result.exitCode === 0) return result.stdout;
   throw await diagnoseInteractionError(
     adb,

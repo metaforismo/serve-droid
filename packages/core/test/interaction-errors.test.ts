@@ -13,14 +13,16 @@ import {
 class ScriptedAdb implements AdbRunner {
   public readonly calls: Array<{ args: string[]; serial?: string; timeoutMs?: number }> = [];
 
-  public constructor(private readonly results: RunResult[]) {}
+  public constructor(private readonly results: Array<RunResult | Error>) {}
 
   public async run(
     args: readonly string[],
     options: { serial?: string; timeoutMs?: number } = {},
   ): Promise<RunResult> {
     this.calls.push({ args: [...args], ...options });
-    return this.results.shift() ?? { stdout: "", stderr: "", exitCode: 0 };
+    const result = this.results.shift() ?? { stdout: "", stderr: "", exitCode: 0 };
+    if (result instanceof Error) throw result;
+    return result;
   }
 
   public async capture(): Promise<Buffer> {
@@ -223,6 +225,44 @@ describe("interaction command errors", () => {
       details: { operation: "type", serial: "device-1" },
     });
     expect(JSON.stringify(await failure)).not.toContain("private%smessage");
+  });
+
+  it("preserves the original failure when diagnostic commands throw", async () => {
+    const adb = new ScriptedAdb([
+      { stdout: "", stderr: "input command failed", exitCode: 1 },
+      new Error("window dumpsys could not start"),
+      new Error("activity dumpsys could not start"),
+    ]);
+
+    await expect(
+      runInteractionCommand(adb, ["shell", "input", "tap", "10", "20"], {
+        serial: "device-1",
+        operation: "tap",
+      }),
+    ).rejects.toMatchObject({
+      code: "ADB_FAILED",
+      message: "input command failed",
+      details: { operation: "tap", serial: "device-1" },
+    });
+    expect(adb.calls).toHaveLength(3);
+  });
+
+  it("normalizes a thrown initial ADB runner error through the same safe boundary", async () => {
+    const adb = new ScriptedAdb([
+      new Error("adb process could not start"),
+      { stdout: unlockedKeyguardDump, stderr: "", exitCode: 0 },
+    ]);
+
+    await expect(
+      runInteractionCommand(adb, ["shell", "input", "text", "private%smessage"], {
+        serial: "device-1",
+        operation: "type",
+      }),
+    ).rejects.toMatchObject({
+      code: "ADB_FAILED",
+      message: "adb process could not start",
+      details: { operation: "type", serial: "device-1" },
+    });
   });
 
   it("keeps a generic failure when keyguard diagnostics are unavailable", async () => {
