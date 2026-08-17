@@ -341,7 +341,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
           current[pointerIndex]!,
           size,
           0,
-          TWO_FINGER_POINTER_IDS[pointerIndex]!,
+          TWO_FINGER_POINTER_IDS[pointerIndex],
         );
         active[pointerIndex] = false;
       }
@@ -365,7 +365,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
       points[cancelIndex]!,
       size,
       0,
-      TWO_FINGER_POINTER_IDS[cancelIndex]!,
+      TWO_FINGER_POINTER_IDS[cancelIndex],
     ).catch(() => undefined);
 
     for (let index = activeIndexes.length - 1; index >= 0; index -= 1) {
@@ -375,7 +375,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
         points[pointerIndex]!,
         size,
         0,
-        TWO_FINGER_POINTER_IDS[pointerIndex]!,
+        TWO_FINGER_POINTER_IDS[pointerIndex],
       ).catch(() => undefined);
     }
   }
