@@ -1,0 +1,42 @@
+name: Canonicalize fixture CI
+
+on:
+  push:
+    branches:
+      - ci/android-fixture-wrapper
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[fixture-ci-formatted]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PNPM_VERSION: 10.28.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ci/android-fixture-wrapper
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Canonicalize permanent workflow
+        run: pnpm exec prettier --write .github/workflows/ci.yml
+      - name: Remove temporary formatter and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/format-fixture-ci.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/workflows/ci.yml
+          git diff --cached --check
+          git commit -m 'Format Android fixture CI [fixture-ci-formatted]'
+          git push origin HEAD:ci/android-fixture-wrapper
