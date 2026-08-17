@@ -73,7 +73,7 @@ because its code path compiles.
 - [x] Return screenshot, display, foreground app, elements, and incremental logs in observations.
 - [x] Scope permission operations to an explicit permission map and package.
 - [x] Route browser pointer and gesture input through scrcpy control rather than ADB input.
-- [ ] Add two-finger control-channel gesture injection.
+- [x] Add two-finger control-channel gesture injection.
 - [x] Add bounded browser clipboard paste with an explicit printable-ASCII contract and documented
       device-keyboard fallback for Unicode.
 - [x] Wait for fresh display metadata after rotation before accepting coordinates.
