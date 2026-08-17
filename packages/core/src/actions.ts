@@ -6,6 +6,8 @@ import type { DisplayInfo, Gesture } from "./types.js";
 
 const ROTATION_TIMEOUT_MS = 5_000;
 const ROTATION_POLL_MS = 100;
+const MAX_GESTURE_POINTS = 64;
+const MAX_GESTURE_DURATION_MS = 60_000;
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -15,6 +17,51 @@ function assertCoordinate(value: number, name: string): void {
   if (!Number.isFinite(value) || value < 0 || value > 1) {
     throw new ServeDroidError("INVALID_ARGUMENT", `${name} must be a number between 0 and 1.`);
   }
+}
+
+function assertDuration(value: number, name = "durationMs"): void {
+  if (!Number.isInteger(value) || value < 1 || value > 60_000) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      `${name} must be an integer between 1 and 60000.`,
+    );
+  }
+}
+
+export function validateGesture(gesture: Gesture): Gesture {
+  if (!gesture || !Array.isArray(gesture.points)) {
+    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
+  }
+  if (gesture.points.length < 2) {
+    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture requires at least two points.");
+  }
+  if (gesture.points.length > MAX_GESTURE_POINTS) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      `A gesture must not exceed ${MAX_GESTURE_POINTS} points.`,
+    );
+  }
+
+  let totalDurationMs = 0;
+  for (const [index, point] of gesture.points.entries()) {
+    if (!point || typeof point !== "object") {
+      throw new ServeDroidError("INVALID_ARGUMENT", `gesture.points[${index}] must be an object.`);
+    }
+    assertCoordinate(point.x, `gesture.points[${index}].x`);
+    assertCoordinate(point.y, `gesture.points[${index}].y`);
+    if (point.durationMs !== undefined) {
+      assertDuration(point.durationMs, `gesture.points[${index}].durationMs`);
+    }
+    if (index > 0) totalDurationMs += point.durationMs ?? 100;
+  }
+
+  if (totalDurationMs > MAX_GESTURE_DURATION_MS) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      `A gesture must not exceed ${MAX_GESTURE_DURATION_MS} ms in total.`,
+    );
+  }
+  return gesture;
 }
 
 function pixel(value: number, size: number): string {
@@ -75,12 +122,7 @@ export class AndroidActions {
     durationMs = 300,
   ): Promise<void> {
     [x1, y1, x2, y2].forEach((value, index) => assertCoordinate(value, `coordinate ${index + 1}`));
-    if (!Number.isInteger(durationMs) || durationMs < 1 || durationMs > 60_000) {
-      throw new ServeDroidError(
-        "INVALID_ARGUMENT",
-        "durationMs must be an integer between 1 and 60000.",
-      );
-    }
+    assertDuration(durationMs);
     const display = await this.getDisplay();
     await checkedRun(
       this.adb,
@@ -99,10 +141,7 @@ export class AndroidActions {
   }
 
   public async gesture(gesture: Gesture): Promise<void> {
-    if (gesture.points.length < 2) {
-      throw new ServeDroidError("INVALID_ARGUMENT", "A gesture requires at least two points.");
-    }
-    const [first, ...rest] = gesture.points;
+    const [first, ...rest] = validateGesture(gesture).points;
     let current = first!;
     for (const point of rest) {
       await this.swipe(current.x, current.y, point.x, point.y, point.durationMs ?? 100);

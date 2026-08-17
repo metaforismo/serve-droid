@@ -21,10 +21,10 @@ validation; hardware evidence is tracked separately in the release checklist._
 
 ## What you get
 
-- H.264 device streaming in a responsive browser cockpit with click-to-tap and drag-to-swipe
-  controls.
-- Mouse-wheel and trackpad scrolling over the device, coalesced into bounded Android swipes so
-  high-resolution input cannot create an ADB request backlog.
+- H.264 device streaming in a responsive browser cockpit with click-to-tap and drag-to-swipe input
+  carried by the same live scrcpy session.
+- Mouse-wheel and trackpad scrolling over the device, coalesced into bounded scrcpy touch gestures
+  so high-resolution browser input cannot create a device-command backlog.
 - One-click screenshot capture from the decoded live frame, with an authenticated device fallback,
   preview, download, and supported-browser clipboard actions.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
@@ -110,8 +110,13 @@ npx serve-droid swipe 0.5 0.8 0.5 0.2 --duration 350
 npx serve-droid app deep-link 'servedroid://fixture/example'
 ```
 
+Browser taps, drags, wheel events, and trackpad bursts use the control writer belonging to the
+active scrcpy video generation. Pointer callers are serialized, move generation and queued actions
+are bounded, and a failed partial gesture is cancelled rather than replayed through ADB. ADB input
+remains the startup and helper-replacement fallback when no scrcpy controller is ready.
+
 In the browser, hover the Android surface and use the mouse wheel or a two-finger trackpad scroll.
-A burst is coalesced into one bounded, cursor-anchored swipe. Modifier-assisted browser zoom
+A burst is coalesced into one bounded, cursor-anchored touch swipe. Modifier-assisted browser zoom
 gestures are left untouched.
 
 Session capture is explicit and bounded. `--record ./recordings` stores the original H.264 stream
@@ -179,6 +184,7 @@ hardware, platform, and publication gates.
 - [x] Add searchable Logcat controls with priority filtering, pause, clear, and copy.
 - [x] Add secure LAN token handoff and bounded browser clipboard controls.
 - [x] Add coalesced mouse-wheel and trackpad scrolling over the Android surface.
+- [x] Route browser pointer and gesture input through the active scrcpy control channel.
 - [ ] Complete the real-device acceptance matrix on macOS, Linux, and Windows.
 - [ ] Publish and validate the npm release candidate before tagging v0.1.0.
 

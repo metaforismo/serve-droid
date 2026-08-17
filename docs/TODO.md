@@ -72,7 +72,7 @@ because its code path compiles.
 - [x] Parse structured Logcat entries into a bounded cursor-addressable buffer.
 - [x] Return screenshot, display, foreground app, elements, and incremental logs in observations.
 - [x] Scope permission operations to an explicit permission map and package.
-- [ ] Route browser pointer and gesture input through scrcpy control rather than ADB input.
+- [x] Route browser pointer and gesture input through scrcpy control rather than ADB input.
 - [ ] Add two-finger control-channel gesture injection.
 - [x] Add bounded browser clipboard paste with an explicit printable-ASCII contract and documented
       device-keyboard fallback for Unicode.
@@ -103,7 +103,7 @@ because its code path compiles.
 - [x] Distinguish browser taps from swipes with pointer capture, normalized bounds, and bounded
       duration.
 - [x] Coalesce mouse-wheel and trackpad input into bounded cursor-anchored swipes without allowing
-      an ADB request backlog.
+      a browser-event or device-action backlog.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 
 ## CLI, HTTP, MCP, and Agent Skill
