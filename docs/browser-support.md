@@ -18,6 +18,34 @@ requests that compatible profile from scrcpy for the shared session. Slow softwa
 queued non-keyframes under backpressure instead of consuming unbounded memory. Human control and
 semantic targeting continue even if video decoding fails.
 
+## Local capability probe
+
+Run an explicit probe before relying on an unfamiliar browser:
+
+```bash
+serve-droid doctor --browser
+```
+
+`doctor` opens one page in the operating system's default browser and waits up to 20 seconds. Use
+`--browser-timeout <seconds>` to choose a bounded value from 1 to 120 seconds. The probe checks the
+actual runtime rather than inferring support from the user-agent string:
+
+- Fetch and WebSocket for the authenticated control plane;
+- H.264 WebCodecs configuration support and Canvas 2D for the primary decoder;
+- WebAssembly, Web Workers, Canvas 2D, and WebGL for the TinyH264 fallback;
+- secure-context, clipboard API, and browser file API availability as additional diagnostics.
+
+The result is included in the stable `--json` doctor output as the `browser` check details. A browser
+is ready only when the control plane and at least one video decoder path are available. Clipboard and
+file API limitations are reported as warnings without pretending that a browser permission has been
+granted.
+
+The handoff is local and one-time. serve-droid binds an ephemeral server to `127.0.0.1`, places a
+cryptographically random capability in the URL path rather than a query parameter, accepts one
+bounded JSON report, sends `no-store`, no-referrer, same-origin resource, and nonce-based Content
+Security Policy headers, then closes the listener. No probe result is uploaded to serve-droid or any
+third party. The probe is opt-in so normal `doctor` runs never open a browser unexpectedly.
+
 ## Performance verification
 
 ### Local synthetic baseline
