@@ -15,11 +15,6 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
       writable: true,
       value: bootstrap,
     });
-    Object.defineProperty(globalThis, "__SERVE_DROID__", {
-      configurable: true,
-      writable: true,
-      value: bootstrap,
-    });
     window.__livePointerMessages = [];
     window.__livePointerControlOpen = false;
 
@@ -122,7 +117,7 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
     route.fulfill({ status: 204, contentType: "image/jpeg", body: "" }),
   );
 
-  await page.goto("/");
+  await page.goto("/#token=browser-test-token");
   await expect(
     page.getByLabel("Live Android device. Click to tap or drag to swipe."),
   ).toBeVisible();
