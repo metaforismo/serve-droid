@@ -106,7 +106,7 @@ because its code path compiles.
       latest-move coalescing, exclusive ownership, heartbeat, and bounded cancellation.
 - [x] Coalesce mouse-wheel and trackpad input into bounded cursor-anchored swipes without allowing
       a browser-event or device-action backlog.
-- [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
+- [x] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
 
 ## CLI, HTTP, MCP, and Agent Skill
 
