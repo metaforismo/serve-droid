@@ -9,7 +9,7 @@ declare global {
 
 async function openCockpit(page: Page, actions: Array<Record<string, unknown>>): Promise<void> {
   await page.addInitScript(() => {
-    Object.defineProperty(globalThis, "__SERVE_DROID_BOOTSTRAP__", {
+    Object.defineProperty(globalThis, "__SERVE_DROID__", {
       configurable: true,
       writable: true,
       value: { token: "browser-test-token" },
