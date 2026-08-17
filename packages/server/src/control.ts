@@ -57,7 +57,7 @@ function assertDuration(value: number, name = "durationMs"): void {
   }
 }
 
-function validateGesture(gesture: Gesture): NormalizedPoint[] {
+export function validatePointerGesture(gesture: Gesture): Gesture {
   if (!gesture || !Array.isArray(gesture.points)) {
     throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
   }
@@ -72,7 +72,7 @@ function validateGesture(gesture: Gesture): NormalizedPoint[] {
   }
 
   let totalDurationMs = 0;
-  const points = gesture.points.map((point, index) => {
+  const points = gesture.points.map((point, index): NormalizedPoint => {
     if (!point || typeof point !== "object") {
       throw new ServeDroidError("INVALID_ARGUMENT", `gesture.points[${index}] must be an object.`);
     }
@@ -93,7 +93,7 @@ function validateGesture(gesture: Gesture): NormalizedPoint[] {
       `A gesture must not exceed ${MAX_GESTURE_DURATION_MS} ms in total.`,
     );
   }
-  return points;
+  return { points };
 }
 
 function errorCause(error: unknown): string {
@@ -137,8 +137,8 @@ export class ScrcpyPointerController implements DevicePointerControl {
   }
 
   public async gesture(gesture: Gesture): Promise<void> {
-    const points = validateGesture(gesture);
-    await this.#enqueue(() => this.#path(points));
+    const validated = validatePointerGesture(gesture);
+    await this.#enqueue(() => this.#path(validated.points));
   }
 
   #enqueue(operation: () => Promise<void>): Promise<void> {
@@ -228,7 +228,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
     }
   }
 
-  async #path(points: NormalizedPoint[]): Promise<void> {
+  async #path(points: readonly NormalizedPoint[]): Promise<void> {
     const size = this.#size();
     const segmentCount = points.length - 1;
     const maxStepsPerSegment = Math.max(1, Math.floor(MAX_MOVE_MESSAGES / segmentCount));
