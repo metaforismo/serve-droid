@@ -55,9 +55,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/wrapper-validation@v6
       - name: Install the pinned package manager
         run: npm install --global pnpm@${{ env.PNPM_VERSION }}
       - run: pnpm install --frozen-lockfile
+      - name: Build fixture for the device scenario
+        working-directory: fixtures/android-test-app
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: Enable KVM acceleration when available
         shell: bash
         run: |
@@ -76,6 +84,7 @@ jobs:
           script: pnpm --filter @serve-droid/core test:device
         env:
           SERVE_DROID_DEVICE_TEST: "1"
+          SERVE_DROID_FIXTURE_APK: ${{ github.workspace }}/fixtures/android-test-app/app/build/outputs/apk/debug/app-debug.apk
 
   browser:
     runs-on: ubuntu-latest
