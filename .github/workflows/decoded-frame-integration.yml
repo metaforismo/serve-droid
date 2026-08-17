@@ -1,0 +1,59 @@
+name: Decoded frame integration
+
+on:
+  push:
+    branches:
+      - feat/decoded-stream-screenshots
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: ${{ !contains(github.event.head_commit.message, 'Integrate decoded stream screenshot routing') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PNPM_VERSION: 10.28.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/decoded-stream-screenshots
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply deterministic integrations
+        run: |
+          python3 scripts/apply-decoded-frame-server-web.py
+          python3 scripts/apply-decoded-frame-mcp.py
+      - name: Typecheck affected packages
+        run: |
+          pnpm --filter @serve-droid/server typecheck
+          pnpm --filter @serve-droid/web typecheck
+          pnpm --filter @serve-droid/mcp typecheck
+      - name: Run decoded-frame focused tests
+        run: >-
+          pnpm exec vitest run
+          packages/server/test/decoded-frame.test.ts
+          packages/server/test/decoded-frame-routing.test.ts
+          packages/web/test/decoded-frame.test.ts
+          packages/web/test/decoded-frame-capture.test.ts
+          packages/web/test/screenshot.test.ts
+          packages/mcp/test/server.test.ts
+      - name: Commit integrated sources
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/server/src/index.ts packages/server/src/server.ts packages/web/src/App.tsx packages/mcp/src/server.ts packages/mcp/test/server.test.ts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No integration changes were needed.'
+            exit 0
+          fi
+          git commit -m 'Integrate decoded stream screenshot routing'
+          git push origin HEAD:feat/decoded-stream-screenshots
