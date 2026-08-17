@@ -14,8 +14,9 @@ leave fragmented. Its browser-first cockpit direction was inspired by
 [serve-sim](https://github.com/EvanBacon/serve-sim), while the implementation and Android control
 plane are independent.
 
-Both cockpits now keep latency-sensitive input on the same live transport as the screen stream.
-`serve-sim` can forward native simulator HID scroll events. serve-droid injects touch through the
-active scrcpy control writer: direct pointer drags become continuous finger events, while browser
-wheel and trackpad bursts are coalesced into bounded touch swipes. Native Android scroll-message
-forwarding and two-finger injection remain separate future capabilities.
+Both cockpits keep latency-sensitive input on the live device transport instead of waiting to
+reconstruct an entire drag after release. `serve-sim` forwards simulator touch/HID events;
+serve-droid now sends authenticated scrcpy `DOWN`, coalesced `MOVE`, and `UP`/`CANCEL` phases while
+the browser pointer is still moving. Wheel and trackpad bursts remain bounded touch swipes rather
+than native Android scroll messages. Two-finger injection and native scroll-message forwarding are
+separate future capabilities.

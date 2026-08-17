@@ -87,8 +87,16 @@ export interface GesturePoint {
   durationMs?: number;
 }
 
+export type GestureStreamPhase = "begin" | "move" | "end" | "cancel";
+
+export interface GestureStream {
+  id: string;
+  phase: GestureStreamPhase;
+}
+
 export interface Gesture {
   points: GesturePoint[];
+  stream?: GestureStream;
 }
 
 export interface SessionInfo {

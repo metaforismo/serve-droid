@@ -32,6 +32,33 @@ startup and helper-replacement fallback only. Once scrcpy injection begins, an e
 complete only part of a gesture. Browser wheel and trackpad bursts are coalesced into swipe actions,
 so they use the same control path without creating one device command per browser event.
 
+The browser cockpit additionally streams a direct pointer lifecycle over `/api/v1/control` using the
+existing gesture action envelope:
+
+```json
+{
+  "type": "gesture",
+  "gesture": {
+    "points": [{ "x": 0.42, "y": 0.67 }],
+    "stream": {
+      "id": "9f30b9d6e495d70df4a8dc6498ff2f658b21",
+      "phase": "begin"
+    }
+  }
+}
+```
+
+`phase` is `begin`, `move`, `end`, or `cancel`; every message contains exactly one normalized point.
+The browser serializes responses and coalesces pending moves to the newest point. The stream id must
+contain 16–128 URL-safe characters and owns one exclusive scrcpy finger lifecycle. Frame dimensions
+are captured at `begin` and remain fixed until termination.
+
+When no scrcpy controller is ready, the ADB adapter rejects `begin` as `TRANSPORT_FAILED` with
+`details.safeToFallback: true` before issuing any device command. The browser may then use its
+bounded release-time tap/swipe action. It never falls back after a successful `begin`. Socket loss,
+move failure, or an end failure is therefore fail-closed. Stationary holds send a sparse same-point
+heartbeat; a stream abandoned without a final message is cancelled after two seconds of inactivity.
+
 UI hierarchy capture verifies display metadata and foreground app identity before and after the
 UIAutomator dump, then checks declared element packages against that app. A context or package
 change triggers one fresh capture; a second mismatch fails with `TRANSPORT_FAILED` rather than

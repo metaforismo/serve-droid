@@ -4,11 +4,18 @@ import {
   ScrcpyPointerId,
   type ScrcpyControlMessageWriter,
 } from "@yume-chan/scrcpy";
-import { ServeDroidError, validateGesture, type Gesture } from "@serve-droid/core";
+import {
+  ServeDroidError,
+  validateGesture,
+  validateGestureStream,
+  type Gesture,
+  type ValidatedGestureStream,
+} from "@serve-droid/core";
 
 const MAX_MOVE_MESSAGES = 120;
 const MAX_PENDING_ACTIONS = 8;
 const TARGET_MOVE_INTERVAL_MS = 16;
+const LIVE_POINTER_TIMEOUT_MS = 2_000;
 
 interface VideoSize {
   width: number;
@@ -24,6 +31,13 @@ interface NormalizedPoint {
 interface PixelPoint {
   x: number;
   y: number;
+}
+
+interface LivePointerState {
+  id: string;
+  size: VideoSize;
+  current: PixelPoint;
+  timeout: ReturnType<typeof setTimeout> | undefined;
 }
 
 type TouchMessage = Parameters<ScrcpyControlMessageWriter["injectTouch"]>[0];
@@ -62,6 +76,7 @@ function errorCause(error: unknown): string {
 export class ScrcpyPointerController implements DevicePointerControl {
   #tail: Promise<void> = Promise.resolve();
   #pendingActions = 0;
+  #live: LivePointerState | undefined;
 
   public constructor(
     private readonly writer: TouchWriter,
@@ -96,6 +111,11 @@ export class ScrcpyPointerController implements DevicePointerControl {
   }
 
   public async gesture(gesture: Gesture): Promise<void> {
+    const stream = validateGestureStream(gesture);
+    if (stream) {
+      await this.#enqueue(() => this.#stream(stream));
+      return;
+    }
     const validated = validateGesture(gesture);
     await this.#enqueue(() => this.#path(validated.points));
   }
@@ -112,6 +132,12 @@ export class ScrcpyPointerController implements DevicePointerControl {
     return result.finally(() => {
       this.#pendingActions -= 1;
     });
+  }
+
+  #enqueueCleanup(operation: () => Promise<void>): Promise<void> {
+    const result = this.#tail.then(operation);
+    this.#tail = result.catch(() => undefined);
+    return result;
   }
 
   #size(): VideoSize {
@@ -168,7 +194,17 @@ export class ScrcpyPointerController implements DevicePointerControl {
     await this.writer.injectTouch(this.#message(action, point, size, pressure));
   }
 
+  #assertIdle(): void {
+    if (this.#live) {
+      throw new ServeDroidError(
+        "TRANSPORT_FAILED",
+        "A live scrcpy pointer stream is already active.",
+      );
+    }
+  }
+
   async #tap(point: NormalizedPoint): Promise<void> {
+    this.#assertIdle();
     const size = this.#size();
     const pixel = this.#pixel(point, size);
     let active = false;
@@ -181,13 +217,12 @@ export class ScrcpyPointerController implements DevicePointerControl {
       if (active) {
         await this.#inject(AndroidMotionEventAction.Cancel, pixel, size, 0).catch(() => undefined);
       }
-      throw new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
-        cause: errorCause(error),
-      });
+      throw this.#transportError(error);
     }
   }
 
   async #path(points: readonly NormalizedPoint[]): Promise<void> {
+    this.#assertIdle();
     const size = this.#size();
     const segmentCount = points.length - 1;
     const maxStepsPerSegment = Math.max(1, Math.floor(MAX_MOVE_MESSAGES / segmentCount));
@@ -224,9 +259,122 @@ export class ScrcpyPointerController implements DevicePointerControl {
           () => undefined,
         );
       }
-      throw new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
-        cause: errorCause(error),
-      });
+      throw this.#transportError(error);
     }
   }
+
+  async #stream(stream: ValidatedGestureStream): Promise<void> {
+    if (stream.phase === "begin") await this.#beginLive(stream);
+    else if (stream.phase === "move") await this.#moveLive(stream);
+    else if (stream.phase === "end") await this.#endLive(stream);
+    else await this.#cancelLive(stream.id, false);
+  }
+
+  async #beginLive(stream: ValidatedGestureStream): Promise<void> {
+    this.#assertIdle();
+    const size = this.#size();
+    const current = this.#pixel(stream.point, size);
+    try {
+      await this.#inject(AndroidMotionEventAction.Down, current, size, 1);
+      const state: LivePointerState = {
+        id: stream.id,
+        size,
+        current,
+        timeout: undefined,
+      };
+      this.#live = state;
+      this.#armLiveTimeout(state);
+    } catch (error) {
+      await this.#inject(AndroidMotionEventAction.Cancel, current, size, 0).catch(() => undefined);
+      throw this.#transportError(error, stream.phase);
+    }
+  }
+
+  async #moveLive(stream: ValidatedGestureStream): Promise<void> {
+    const state = this.#liveFor(stream.id);
+    const current = this.#pixel(stream.point, state.size);
+    try {
+      await this.#inject(AndroidMotionEventAction.Move, current, state.size, 1);
+      state.current = current;
+      this.#armLiveTimeout(state);
+    } catch (error) {
+      await this.#abortLive(state);
+      throw this.#transportError(error, stream.phase);
+    }
+  }
+
+  async #endLive(stream: ValidatedGestureStream): Promise<void> {
+    const state = this.#liveFor(stream.id);
+    const current = this.#pixel(stream.point, state.size);
+    try {
+      if (current.x !== state.current.x || current.y !== state.current.y) {
+        await this.#inject(AndroidMotionEventAction.Move, current, state.size, 1);
+      }
+      await this.#inject(AndroidMotionEventAction.Up, current, state.size, 0);
+      this.#clearLive(state);
+    } catch (error) {
+      await this.#abortLive(state);
+      throw this.#transportError(error, stream.phase);
+    }
+  }
+
+  async #cancelLive(id: string, timedOut: boolean): Promise<void> {
+    const state = this.#live;
+    if (!state) return;
+    if (state.id !== id) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "The live pointer stream id does not match.");
+    }
+    this.#clearLive(state);
+    try {
+      await this.#inject(AndroidMotionEventAction.Cancel, state.current, state.size, 0);
+    } catch (error) {
+      if (!timedOut) throw this.#transportError(error, "cancel");
+    }
+  }
+
+  #liveFor(id: string): LivePointerState {
+    if (!this.#live) {
+      throw new ServeDroidError("TRANSPORT_FAILED", "No live scrcpy pointer stream is active.");
+    }
+    if (this.#live.id !== id) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "The live pointer stream id does not match.");
+    }
+    return this.#live;
+  }
+
+  #armLiveTimeout(state: LivePointerState): void {
+    if (state.timeout) clearTimeout(state.timeout);
+    const timeout = setTimeout(() => {
+      void this.#enqueueCleanup(async () => {
+        if (this.#live !== state || state.timeout !== timeout) return;
+        await this.#cancelLive(state.id, true);
+      }).catch(() => {
+        if (this.#live === state && state.timeout === timeout) this.#clearLive(state);
+      });
+    }, LIVE_POINTER_TIMEOUT_MS);
+    state.timeout = timeout;
+    timeout.unref();
+  }
+
+  #clearLive(state: LivePointerState): void {
+    if (state.timeout) clearTimeout(state.timeout);
+    state.timeout = undefined;
+    if (this.#live === state) this.#live = undefined;
+  }
+
+  async #abortLive(state: LivePointerState): Promise<void> {
+    this.#clearLive(state);
+    await this.#inject(AndroidMotionEventAction.Cancel, state.current, state.size, 0).catch(
+      () => undefined,
+    );
+  }
+
+  #transportError(error: unknown, phase?: string): ServeDroidError {
+    return new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
+      cause: errorCause(error),
+      ...(phase ? { phase } : {}),
+    });
+  }
 }
+
+export const LIVE_POINTER_STREAM_TIMEOUT_MS = LIVE_POINTER_TIMEOUT_MS;

@@ -102,6 +102,8 @@ because its code path compiles.
 - [x] Add a responsive active-device sidebar and structured inspector workspace.
 - [x] Distinguish browser taps from swipes with pointer capture, normalized bounds, and bounded
       duration.
+- [x] Stream direct pointer movement through authenticated scrcpy control before release with
+      latest-move coalescing, exclusive ownership, heartbeat, and bounded cancellation.
 - [x] Coalesce mouse-wheel and trackpad input into bounded cursor-anchored swipes without allowing
       a browser-event or device-action backlog.
 - [ ] Run Playwright interaction, accessibility, upload, reconnect, and auth suites.
