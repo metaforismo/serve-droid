@@ -211,7 +211,7 @@ export async function readKeyguardDiagnostics(
   return diagnostics;
 }
 
-function boundedMessage(value: string): string {
+export function boundedInteractionMessage(value: string): string {
   const normalized = value
     // eslint-disable-next-line no-control-regex -- Intentionally strips ANSI CSI from untrusted Android output.
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
@@ -224,14 +224,16 @@ function boundedMessage(value: string): string {
 }
 
 function failureMessage(value: unknown): string {
-  if (typeof value === "string") return boundedMessage(value);
+  if (typeof value === "string") return boundedInteractionMessage(value);
   if (value instanceof ServeDroidError || value instanceof Error)
-    return boundedMessage(value.message);
-  return boundedMessage(String(value));
+    return boundedInteractionMessage(value.message);
+  return boundedInteractionMessage(String(value));
 }
 
 function resultFailureMessage(result: RunResult): string {
-  return boundedMessage(result.stderr || result.stdout || `adb exited ${result.exitCode}`);
+  return boundedInteractionMessage(
+    result.stderr || result.stdout || `adb exited ${result.exitCode}`,
+  );
 }
 
 export function inputRestrictionEvidence(message: string): string | null {

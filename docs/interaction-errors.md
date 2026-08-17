@@ -29,8 +29,8 @@ adb shell dumpsys activity activities
 
 The parser only accepts boolean fields inside recognized Android keyguard blocks, including
 `KeyguardServiceDelegate`, `KeyguardStateMonitor`, and `KeyguardController`. Unrelated values such as
-another service's `showing=true` are ignored. Diagnostic output is capped at 256 KiB and each command
-has a three-second timeout.
+another service's `showing=true` are ignored. The parser inspects at most the first 256 KiB of each
+returned dump, and each command has a three-second timeout.
 
 An explicit input-policy classification requires input-injection language together with a permission
 or policy signal. Examples include Android's `INJECT_EVENTS` permission rejection and OEM messages

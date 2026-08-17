@@ -34,7 +34,7 @@ describe("scrcpy input restriction errors", () => {
 
   it("keeps unrelated writer failures as TRANSPORT_FAILED", async () => {
     const control = new ScrcpyPointerController(
-      new RejectingWriter("control socket closed"),
+      new RejectingWriter("\u001b[31mcontrol socket closed\u001b[0m"),
       () => ({ width: 100, height: 200 }),
       () => Promise.resolve(),
     );
