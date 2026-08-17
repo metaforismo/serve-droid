@@ -15,11 +15,7 @@ class FakeWriter {
 
   public async injectTouch(message: TouchMessage): Promise<void> {
     this.messages.push({ ...message });
-    if (
-      this.failFirstMove &&
-      !this.#failed &&
-      message.action === AndroidMotionEventAction.Move
-    ) {
+    if (this.failFirstMove && !this.#failed && message.action === AndroidMotionEventAction.Move) {
       this.#failed = true;
       throw new Error("control socket closed");
     }
@@ -148,9 +144,6 @@ describe("ScrcpyPointerController two-finger gestures", () => {
     expect(pointerIds(writer).slice(-3)).toEqual([2n, 2n, 1n]);
 
     await control.tap(0.5, 0.5);
-    expect(pointerIds(writer).slice(-2)).toEqual([
-      ScrcpyPointerId.Finger,
-      ScrcpyPointerId.Finger,
-    ]);
+    expect(pointerIds(writer).slice(-2)).toEqual([ScrcpyPointerId.Finger, ScrcpyPointerId.Finger]);
   });
 });

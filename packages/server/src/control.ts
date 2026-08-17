@@ -289,7 +289,13 @@ export class ScrcpyPointerController implements DevicePointerControl {
 
     try {
       for (const [pointerIndex, pointerId] of TWO_FINGER_POINTER_IDS.entries()) {
-        await this.#inject(AndroidMotionEventAction.Down, current[pointerIndex]!, size, 1, pointerId);
+        await this.#inject(
+          AndroidMotionEventAction.Down,
+          current[pointerIndex]!,
+          size,
+          1,
+          pointerId,
+        );
         active[pointerIndex] = true;
       }
 
@@ -325,7 +331,11 @@ export class ScrcpyPointerController implements DevicePointerControl {
         }
       }
 
-      for (let pointerIndex = TWO_FINGER_POINTER_IDS.length - 1; pointerIndex >= 0; pointerIndex -= 1) {
+      for (
+        let pointerIndex = TWO_FINGER_POINTER_IDS.length - 1;
+        pointerIndex >= 0;
+        pointerIndex -= 1
+      ) {
         await this.#inject(
           AndroidMotionEventAction.Up,
           current[pointerIndex]!,

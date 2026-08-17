@@ -59,7 +59,8 @@ describe("two-finger gesture contract", () => {
     ).toThrowError(
       expect.objectContaining({
         code: "INVALID_ARGUMENT",
-        message: "A two-finger gesture requires points and secondaryPoints to have the same length.",
+        message:
+          "A two-finger gesture requires points and secondaryPoints to have the same length.",
       }),
     );
 
