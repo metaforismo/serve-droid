@@ -1,0 +1,61 @@
+name: Unify interaction message safety
+
+on:
+  push:
+    branches:
+      - feat/typed-interaction-errors
+    paths:
+      - .github/workflows/unify-interaction-message-safety.yml
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10.28.0
+
+jobs:
+  unify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - name: Apply deterministic safety patches
+        run: |
+          python scripts/share-bounded-interaction-message.py
+          python scripts/sanitize-scrcpy-interaction-errors.py
+      - name: Verify shared sanitization
+        run: |
+          pnpm exec prettier --write \
+            docs/interaction-errors.md \
+            packages/core/src/interaction-errors.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts
+          pnpm exec eslint \
+            packages/core/src/interaction-errors.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts
+          pnpm typecheck
+          pnpm exec vitest run \
+            packages/core/test/interaction-errors.test.ts \
+            packages/server/test/typed-input-errors.test.ts
+      - name: Commit product changes
+        shell: bash
+        run: |
+          git add \
+            docs/interaction-errors.md \
+            packages/core/src/interaction-errors.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts
+          if git diff --cached --quiet; then
+            echo "Interaction messages already share the safe boundary."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Share bounded interaction message sanitization"
+          git push origin HEAD:feat/typed-interaction-errors
