@@ -20,7 +20,21 @@ export type ErrorCode =
   | "PORT_IN_USE"
   | "TRANSPORT_FAILED";
 
+const SERVE_DROID_ERROR_BRAND: unique symbol = Symbol.for("@serve-droid/error");
+
+interface BrandedServeDroidError {
+  readonly [SERVE_DROID_ERROR_BRAND]: true;
+}
+
 export class ServeDroidError extends Error {
+  public static [Symbol.hasInstance](value: unknown): boolean {
+    return (
+      value instanceof Error &&
+      (value as Partial<BrandedServeDroidError>)[SERVE_DROID_ERROR_BRAND] === true
+    );
+  }
+
+  public readonly [SERVE_DROID_ERROR_BRAND] = true as const;
   public readonly code: ErrorCode;
   public readonly details: Record<string, unknown> | undefined;
 

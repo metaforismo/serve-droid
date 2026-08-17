@@ -74,6 +74,10 @@ function ok(stdout: string): RunResult {
   return { stdout, stderr: "", exitCode: 0 };
 }
 
+function hasAdbInputAction(adb: FakeAdb): boolean {
+  return adb.calls.some(([command, operation]) => command === "shell" && operation === "input");
+}
+
 const device: DeviceSummary = {
   serial: "serial",
   state: "device",
@@ -134,7 +138,7 @@ describe("live pointer control routing", () => {
 
     await expect(next).resolves.toMatchObject({ schemaVersion: 1, ok: true });
     expect(pointer.gestures).toEqual([begin.gesture]);
-    expect(adb.calls.some((call) => call.includes("input"))).toBe(false);
+    expect(hasAdbInputAction(adb)).toBe(false);
     socket.close();
   });
 
@@ -156,7 +160,7 @@ describe("live pointer control routing", () => {
         details: { safeToFallback: true, phase: "begin" },
       },
     });
-    expect(adb.calls.some((call) => call.includes("input"))).toBe(false);
+    expect(hasAdbInputAction(adb)).toBe(false);
     socket.close();
   });
 });
