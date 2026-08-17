@@ -81,9 +81,12 @@ export interface Observation {
   nextLogCursor: string;
 }
 
-export interface GesturePoint {
+export interface GesturePosition {
   x: number;
   y: number;
+}
+
+export interface GesturePoint extends GesturePosition {
   durationMs?: number;
 }
 
@@ -96,6 +99,7 @@ export interface GestureStream {
 
 export interface Gesture {
   points: GesturePoint[];
+  secondaryPoints?: GesturePosition[];
   stream?: GestureStream;
 }
 
