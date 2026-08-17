@@ -31,9 +31,8 @@ jobs:
         run: |
           python3 scripts/apply-decoded-frame-server-web.py
           python3 scripts/apply-decoded-frame-mcp.py
-          if [ -f scripts/harden-decoded-frame.py ]; then
-            python3 scripts/harden-decoded-frame.py
-          fi
+          python3 scripts/harden-decoded-frame.py
+          python3 scripts/fix-decoded-frame-lint.py
       - name: Format generated changes
         run: pnpm format
       - name: Verify repository
