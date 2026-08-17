@@ -22,7 +22,9 @@ jobs:
       - run: npm install --global pnpm@${{ env.PNPM_VERSION }}
       - run: pnpm install --frozen-lockfile
       - name: Apply deterministic integration
-        run: python scripts/apply-typed-interaction-errors.py
+        run: |
+          python scripts/apply-typed-interaction-errors.py
+          python scripts/fix-typed-interaction-errors.py
       - name: Format, lint, and run focused tests
         run: |
           pnpm exec eslint \
