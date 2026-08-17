@@ -134,6 +134,12 @@ export class ScrcpyPointerController implements DevicePointerControl {
     });
   }
 
+  #enqueueCleanup(operation: () => Promise<void>): Promise<void> {
+    const result = this.#tail.then(operation);
+    this.#tail = result.catch(() => undefined);
+    return result;
+  }
+
   #size(): VideoSize {
     const size = this.getVideoSize();
     if (
@@ -339,7 +345,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
   #armLiveTimeout(state: LivePointerState): void {
     if (state.timeout) clearTimeout(state.timeout);
     const timeout = setTimeout(() => {
-      void this.#enqueue(async () => {
+      void this.#enqueueCleanup(async () => {
         if (this.#live !== state || state.timeout !== timeout) return;
         await this.#cancelLive(state.id, true);
       }).catch(() => {
