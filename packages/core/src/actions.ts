@@ -42,6 +42,12 @@ export function validateGestureStream(gesture: Gesture): ValidatedGestureStream 
   if (!gesture || !Array.isArray(gesture.points)) {
     throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
   }
+  if (gesture.secondaryPoints !== undefined) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A live pointer stream must not include secondaryPoints.",
+    );
+  }
   if (!stream || typeof stream !== "object") {
     throw new ServeDroidError("INVALID_ARGUMENT", "A gesture stream descriptor is invalid.");
   }
@@ -114,6 +120,38 @@ export function validateGesture(gesture: Gesture): Gesture {
       `A gesture must not exceed ${MAX_GESTURE_DURATION_MS} ms in total.`,
     );
   }
+
+  if (gesture.secondaryPoints !== undefined) {
+    if (!Array.isArray(gesture.secondaryPoints)) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "gesture.secondaryPoints must be an array when provided.",
+      );
+    }
+    if (gesture.secondaryPoints.length !== gesture.points.length) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "A two-finger gesture requires points and secondaryPoints to have the same length.",
+      );
+    }
+    for (const [index, point] of gesture.secondaryPoints.entries()) {
+      if (!point || typeof point !== "object") {
+        throw new ServeDroidError(
+          "INVALID_ARGUMENT",
+          `gesture.secondaryPoints[${index}] must be an object.`,
+        );
+      }
+      assertCoordinate(point.x, `gesture.secondaryPoints[${index}].x`);
+      assertCoordinate(point.y, `gesture.secondaryPoints[${index}].y`);
+      if ("durationMs" in point) {
+        throw new ServeDroidError(
+          "INVALID_ARGUMENT",
+          "secondaryPoints must not include durationMs; the primary points define the shared timeline.",
+        );
+      }
+    }
+  }
+
   return gesture;
 }
 
@@ -202,7 +240,15 @@ export class AndroidActions {
         { safeToFallback: true, phase: stream.phase },
       );
     }
-    const [first, ...rest] = validateGesture(gesture).points;
+    const validated = validateGesture(gesture);
+    if (validated.secondaryPoints !== undefined) {
+      throw new ServeDroidError(
+        "TRANSPORT_FAILED",
+        "Two-finger gestures require an active scrcpy control channel.",
+        { safeToFallback: false, pointerCount: 2 },
+      );
+    }
+    const [first, ...rest] = validated.points;
     let current = first!;
     for (const point of rest) {
       await this.swipe(current.x, current.y, point.x, point.y, point.durationMs ?? 100);
