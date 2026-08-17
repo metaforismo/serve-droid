@@ -29,7 +29,7 @@ export interface AudioState {
 }
 
 export interface VideoSource extends EventEmitter<VideoSourceEvents> {
-  readonly control?: DevicePointerControl;
+  readonly control?: DevicePointerControl | undefined;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
