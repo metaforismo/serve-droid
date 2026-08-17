@@ -1,3 +1,12 @@
+declare global {
+  interface Window {
+    __SERVE_DROID_WEBSOCKET_FACTORY__?: (
+      url: string,
+      protocols: readonly string[],
+    ) => WebSocket;
+  }
+}
+
 const fragment = new URLSearchParams(location.hash.replace(/^#/u, ""));
 const token = window.__SERVE_DROID__?.token || fragment.get("token") || "";
 if (fragment.has("token")) history.replaceState(null, "", `${location.pathname}${location.search}`);
@@ -137,5 +146,7 @@ export function upload(
 
 export function authenticatedWebSocket(path: string): WebSocket {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  return new WebSocket(`${protocol}//${location.host}${path}`, ["serve-droid", `token.${token}`]);
+  const url = `${protocol}//${location.host}${path}`;
+  const protocols = ["serve-droid", `token.${token}`] as const;
+  return window.__SERVE_DROID_WEBSOCKET_FACTORY__?.(url, protocols) ?? new WebSocket(url, protocols);
 }
