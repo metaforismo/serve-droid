@@ -13,6 +13,26 @@ class FakeWriter {
   }
 }
 
+class BlockingWriter extends FakeWriter {
+  public blockMoves = false;
+  #releaseMoves!: () => void;
+  readonly #moveGate = new Promise<void>((resolve) => {
+    this.#releaseMoves = resolve;
+  });
+
+  public override async injectTouch(message: TouchMessage): Promise<void> {
+    await super.injectTouch(message);
+    if (this.blockMoves && message.action === AndroidMotionEventAction.Move) {
+      await this.#moveGate;
+    }
+  }
+
+  public unblockMoves(): void {
+    this.blockMoves = false;
+    this.#releaseMoves();
+  }
+}
+
 function live(id: string, phase: GestureStreamPhase, x: number, y: number): Gesture {
   return { points: [{ x, y }], stream: { id, phase } };
 }
@@ -81,5 +101,29 @@ describe("live scrcpy pointer streams", () => {
       AndroidMotionEventAction.Down,
       AndroidMotionEventAction.Cancel,
     ]);
+  });
+
+  it("reserves serialized timeout cleanup even when the public action queue is full", async () => {
+    vi.useFakeTimers();
+    const writer = new BlockingWriter();
+    const control = new ScrcpyPointerController(writer, () => ({ width: 100, height: 100 }));
+    const id = "0123456789abcdef";
+
+    await control.gesture(live(id, "begin", 0.1, 0.1));
+    writer.blockMoves = true;
+    const pendingMoves = Array.from({ length: 8 }, (_, index) =>
+      control.gesture(live(id, "move", 0.2 + index * 0.05, 0.2)),
+    );
+    await Promise.resolve();
+
+    await expect(
+      vi.advanceTimersByTimeAsync(LIVE_POINTER_STREAM_TIMEOUT_MS),
+    ).resolves.toBeUndefined();
+
+    writer.unblockMoves();
+    await Promise.all(pendingMoves);
+    await control.gesture(live(id, "cancel", 0.55, 0.2));
+
+    expect(actions(writer).at(-1)).toBe(AndroidMotionEventAction.Cancel);
   });
 });
