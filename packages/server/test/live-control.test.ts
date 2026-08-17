@@ -116,9 +116,7 @@ describe("live scrcpy pointer streams", () => {
     );
     await Promise.resolve();
 
-    await expect(
-      vi.advanceTimersByTimeAsync(LIVE_POINTER_STREAM_TIMEOUT_MS),
-    ).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(LIVE_POINTER_STREAM_TIMEOUT_MS);
 
     writer.unblockMoves();
     await Promise.all(pendingMoves);
