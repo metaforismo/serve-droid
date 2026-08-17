@@ -113,10 +113,7 @@ test("visible cockpit controls have accessible names and keyboard focus", async 
   }
 
   await expect(page.getByRole("tablist")).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Logcat/u })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(page.getByRole("tab", { name: /Logcat/u })).toHaveAttribute("aria-selected", "true");
   expect(await page.locator('[aria-live="polite"]').count()).toBeGreaterThan(0);
 
   await page.keyboard.press("Tab");
