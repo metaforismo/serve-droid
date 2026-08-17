@@ -7,20 +7,21 @@ permissions:
   contents: write
   id-token: write
 
+env:
+  PNPM_VERSION: 10.28.0
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: npm
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.28.0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: pnpm
+      - name: Install the pinned package manager
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify
       - run: npm publish --provenance --access public
