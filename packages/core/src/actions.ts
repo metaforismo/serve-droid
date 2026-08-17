@@ -2,12 +2,30 @@ import { basename } from "node:path";
 import type { AdbRunner } from "./adb.js";
 import { checkedRun } from "./adb.js";
 import { ServeDroidError } from "./errors.js";
-import type { DisplayInfo, Gesture } from "./types.js";
+import type {
+  DisplayInfo,
+  Gesture,
+  GesturePoint,
+  GestureStreamPhase,
+} from "./types.js";
 
 const ROTATION_TIMEOUT_MS = 5_000;
 const ROTATION_POLL_MS = 100;
 const MAX_GESTURE_POINTS = 64;
 const MAX_GESTURE_DURATION_MS = 60_000;
+const GESTURE_STREAM_ID = /^[A-Za-z0-9_-]{16,128}$/u;
+const GESTURE_STREAM_PHASES: readonly GestureStreamPhase[] = [
+  "begin",
+  "move",
+  "end",
+  "cancel",
+];
+
+export interface ValidatedGestureStream {
+  id: string;
+  phase: GestureStreamPhase;
+  point: GesturePoint;
+}
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -28,9 +46,54 @@ function assertDuration(value: number, name = "durationMs"): void {
   }
 }
 
+export function validateGestureStream(gesture: Gesture): ValidatedGestureStream | null {
+  const stream = gesture?.stream;
+  if (stream === undefined) return null;
+  if (!gesture || !Array.isArray(gesture.points)) {
+    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
+  }
+  if (!stream || typeof stream !== "object") {
+    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture stream descriptor is invalid.");
+  }
+  if (typeof stream.id !== "string" || !GESTURE_STREAM_ID.test(stream.id)) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A gesture stream id must contain 16 to 128 URL-safe characters.",
+    );
+  }
+  if (!GESTURE_STREAM_PHASES.includes(stream.phase)) {
+    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture stream phase is invalid.");
+  }
+  if (gesture.points.length !== 1) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A gesture stream message must contain exactly one point.",
+    );
+  }
+  const point = gesture.points[0];
+  if (!point || typeof point !== "object") {
+    throw new ServeDroidError("INVALID_ARGUMENT", "gesture.points[0] must be an object.");
+  }
+  assertCoordinate(point.x, "gesture.points[0].x");
+  assertCoordinate(point.y, "gesture.points[0].y");
+  if (point.durationMs !== undefined) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A gesture stream point must not include durationMs.",
+    );
+  }
+  return { id: stream.id, phase: stream.phase, point };
+}
+
 export function validateGesture(gesture: Gesture): Gesture {
   if (!gesture || !Array.isArray(gesture.points)) {
     throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
+  }
+  if (gesture.stream) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "A streaming gesture must use the live pointer control path.",
+    );
   }
   if (gesture.points.length < 2) {
     throw new ServeDroidError("INVALID_ARGUMENT", "A gesture requires at least two points.");
@@ -141,6 +204,14 @@ export class AndroidActions {
   }
 
   public async gesture(gesture: Gesture): Promise<void> {
+    const stream = validateGestureStream(gesture);
+    if (stream) {
+      throw new ServeDroidError(
+        "TRANSPORT_FAILED",
+        "Live pointer streaming requires an active scrcpy control channel.",
+        { safeToFallback: true, phase: stream.phase },
+      );
+    }
     const [first, ...rest] = validateGesture(gesture).points;
     let current = first!;
     for (const point of rest) {

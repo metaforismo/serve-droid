@@ -21,8 +21,8 @@ validation; hardware evidence is tracked separately in the release checklist._
 
 ## What you get
 
-- H.264 device streaming in a responsive browser cockpit with click-to-tap and drag-to-swipe input
-  carried by the same live scrcpy session.
+- H.264 device streaming in a responsive browser cockpit with direct pointer `DOWN`, coalesced
+  `MOVE`, and `UP`/`CANCEL` events carried by the same live scrcpy session before release.
 - Mouse-wheel and trackpad scrolling over the device, coalesced into bounded scrcpy touch gestures
   so high-resolution browser input cannot create a device-command backlog.
 - One-click screenshot capture from the decoded live frame, with an authenticated device fallback,
@@ -110,10 +110,14 @@ npx serve-droid swipe 0.5 0.8 0.5 0.2 --duration 350
 npx serve-droid app deep-link 'servedroid://fixture/example'
 ```
 
-Browser taps, drags, wheel events, and trackpad bursts use the control writer belonging to the
-active scrcpy video generation. Pointer callers are serialized, move generation and queued actions
-are bounded, and a failed partial gesture is cancelled rather than replayed through ADB. ADB input
-remains the startup and helper-replacement fallback when no scrcpy controller is ready.
+Direct browser pointers now stream an authenticated `begin → move* → end` lifecycle over the
+control WebSocket while the cursor or finger is still moving. The browser keeps one request and one
+latest move pending, while the server gives the stream exclusive ownership of one scrcpy finger and
+maps it against a fixed encoded-frame size. If scrcpy is unavailable before `begin`, the request is
+rejected before device input and the cockpit safely uses its existing bounded release-time action.
+After a successful `begin`, failures are never replayed through ADB. A sparse same-point heartbeat
+keeps intentional long presses alive, while abandoned streams receive a best-effort cancel after two
+seconds of inactivity.
 
 In the browser, hover the Android surface and use the mouse wheel or a two-finger trackpad scroll.
 A burst is coalesced into one bounded, cursor-anchored touch swipe. Modifier-assisted browser zoom
@@ -185,6 +189,7 @@ hardware, platform, and publication gates.
 - [x] Add secure LAN token handoff and bounded browser clipboard controls.
 - [x] Add coalesced mouse-wheel and trackpad scrolling over the Android surface.
 - [x] Route browser pointer and gesture input through the active scrcpy control channel.
+- [x] Stream direct pointer movement before release with bounded coalescing and cancellation.
 - [ ] Complete the real-device acceptance matrix on macOS, Linux, and Windows.
 - [ ] Publish and validate the npm release candidate before tagging v0.1.0.
 
