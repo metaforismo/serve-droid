@@ -128,7 +128,21 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
   let authorization = "";
   let fileName = "";
   let contentType = "";
-  let bytes = -1;
+  await page.addInitScript(() => {
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function (
+      body?: Document | XMLHttpRequestBodyInit | null,
+    ): void {
+      if (body instanceof Blob) {
+        void body.arrayBuffer().then((buffer) => {
+          (
+            window as typeof window & { __serveDroidAcceptanceUpload?: number[] }
+          ).__serveDroidAcceptanceUpload = Array.from(new Uint8Array(buffer));
+        });
+      }
+      originalSend.call(this, body ?? null);
+    };
+  });
   await routeCockpitHttp(page);
   await routeVideo(page);
   await routeStableControl(page);
@@ -137,7 +151,6 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
     authorization = headers.authorization ?? "";
     fileName = decodeURIComponent(headers["x-file-name"] ?? "");
     contentType = headers["content-type"] ?? "";
-    bytes = route.request().postDataBuffer()?.length ?? 0;
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -163,7 +176,16 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
   expect(authorization).toBe(`Bearer ${token}`);
   expect(fileName).toBe("notes.txt");
   expect(contentType).toBe("application/octet-stream");
-  expect(bytes).toBe(payload.length);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & { __serveDroidAcceptanceUpload?: number[] }
+          ).__serveDroidAcceptanceUpload ?? [],
+      ),
+    )
+    .toEqual([...payload]);
 });
 
 test("live pointer control reconnects after a forced socket failure", async ({ page }) => {
