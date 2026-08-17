@@ -29,6 +29,7 @@ export default tseslint.config(
   },
   {
     files: [
+      "packages/cli/test/**/*.ts",
       "packages/core/test/**/*.ts",
       "packages/mcp/test/**/*.ts",
       "packages/server/test/**/*.ts",

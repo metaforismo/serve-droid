@@ -37,7 +37,7 @@ because its code path compiles.
 - [x] Provide machine-readable and human-readable doctor output.
 - [x] Link to official Platform Tools setup without downloading ADB.
 - [x] Diagnose occupied fixed ports before device startup and expose a typed `PORT_IN_USE` error.
-- [ ] Add browser capability probing to `doctor`.
+- [x] Add browser capability probing to `doctor`.
 - [ ] Verify unauthorized and offline recovery with real devices.
 - [ ] Verify Wi-Fi pairing and document observed OEM-specific behavior.
 
