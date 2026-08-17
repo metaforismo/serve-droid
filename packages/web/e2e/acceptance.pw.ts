@@ -180,9 +180,8 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
     .poll(() =>
       page.evaluate(
         () =>
-          (
-            window as typeof window & { __serveDroidAcceptanceUpload?: number[] }
-          ).__serveDroidAcceptanceUpload ?? [],
+          (window as typeof window & { __serveDroidAcceptanceUpload?: number[] })
+            .__serveDroidAcceptanceUpload ?? [],
       ),
     )
     .toEqual([...payload]);
