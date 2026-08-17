@@ -78,7 +78,7 @@ because its code path compiles.
       device-keyboard fallback for Unicode.
 - [x] Wait for fresh display metadata after rotation before accepting coordinates.
 - [x] Detect hierarchy staleness after rotation and foreground-app changes.
-- [ ] Capture agent screenshots from the decoded stream before using ADB fallback.
+- [x] Capture agent screenshots from the decoded stream before using ADB fallback.
 - [x] Reset package PID filtering automatically after every app relaunch.
 - [x] Add typed errors for locked/secure screens and OEM input restrictions.
 

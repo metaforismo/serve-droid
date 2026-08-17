@@ -26,6 +26,14 @@ import { removeSessionState, writeSessionState } from "./state.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 import type { TunnelStatus } from "./tunnel.js";
 import { listenHttpServer } from "./listen.js";
+import {
+  DECODED_FRAME_DEFAULT_QUALITY,
+  DECODED_FRAME_DEFAULT_WIDTH,
+  DECODED_FRAME_MAX_PAYLOAD,
+  DecodedFrameBroker,
+  isDecodedFrameProviderHello,
+  jpegDimensions,
+} from "./decoded-frame.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -41,6 +49,20 @@ export interface ServerOptions {
   audio?: boolean;
   frameAncestor?: string;
   maxVideoClients?: number;
+}
+
+export interface AgentScreenshotOptions {
+  width?: number;
+  quality?: number;
+}
+
+export interface AgentScreenshot {
+  data: Buffer;
+  mimeType: "image/jpeg";
+  source: "stream" | "device";
+  width: number | null;
+  height: number | null;
+  capturedAt: string;
 }
 
 export function encodeAudioPacket(data: Buffer, pts: bigint): Buffer {
@@ -140,6 +162,7 @@ export class ServeDroidServer {
   readonly #audioWebSocket: WebSocketServer;
   readonly #controlWebSocket: WebSocketServer;
   readonly #video: VideoSource;
+  readonly #decodedFrames = new DecodedFrameBroker();
   readonly #token: string;
   readonly #host: string;
   readonly #requestedPort: number;
@@ -177,7 +200,10 @@ export class ServeDroidServer {
     }
     this.#recordingOptions = options.recording;
     this.#http = createServer((request, response) => void this.#handle(request, response));
-    this.#videoWebSocket = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+    this.#videoWebSocket = new WebSocketServer({
+      noServer: true,
+      maxPayload: DECODED_FRAME_MAX_PAYLOAD,
+    });
     this.#audioWebSocket = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
     this.#controlWebSocket = new WebSocketServer({ noServer: true, maxPayload: JSON_LIMIT });
     const audioRequested = Boolean(options.audio);
@@ -233,6 +259,23 @@ export class ServeDroidServer {
       }
     });
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
+    this.#videoWebSocket.on("connection", (socket) => {
+      let unregister: (() => void) | undefined;
+      socket.on("message", (message, binary) => {
+        if (binary) return;
+        const value = Array.isArray(message)
+          ? Buffer.concat(message).toString("utf8")
+          : Buffer.isBuffer(message)
+            ? message.toString("utf8")
+            : Buffer.from(message).toString("utf8");
+        if (!unregister && isDecodedFrameProviderHello(value)) {
+          unregister = this.#decodedFrames.register(socket);
+          return;
+        }
+        if (unregister) this.#decodedFrames.receive(socket, value);
+      });
+      socket.once("close", () => unregister?.());
+    });
     this.#controlWebSocket.on("connection", (socket) => {
       socket.on("message", (message) => {
         const value = Buffer.isBuffer(message)
@@ -254,6 +297,49 @@ export class ServeDroidServer {
 
   public get recording(): RecordingStatus | null {
     return this.#recorder?.status ?? null;
+  }
+
+  public async captureAgentScreenshot(
+    options: AgentScreenshotOptions = {},
+  ): Promise<AgentScreenshot> {
+    const width = options.width ?? DECODED_FRAME_DEFAULT_WIDTH;
+    const quality = options.quality ?? DECODED_FRAME_DEFAULT_QUALITY;
+    if (!Number.isInteger(width) || width < 1 || width > 2_048) {
+      throw new ServeDroidError("INVALID_ARGUMENT", "Screenshot width must be between 1 and 2048.");
+    }
+    if (!Number.isInteger(quality) || quality < 25 || quality > 95) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Screenshot quality must be between 25 and 95.",
+      );
+    }
+
+    const stream = await this.#decodedFrames.capture({ maxWidth: width, quality });
+    if (stream) {
+      this.#recorder?.recordEvent("screenshot", {
+        source: "stream",
+        width: stream.width,
+        height: stream.height,
+      });
+      return { ...stream, source: "stream" };
+    }
+
+    const data = await this.service.screenshot({ width, quality });
+    const dimensions = jpegDimensions(data);
+    const capture: AgentScreenshot = {
+      data,
+      mimeType: "image/jpeg",
+      source: "device",
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+      capturedAt: new Date().toISOString(),
+    };
+    this.#recorder?.recordEvent("screenshot", {
+      source: capture.source,
+      width: capture.width,
+      height: capture.height,
+    });
+    return capture;
   }
 
   public async start(): Promise<SessionInfo> {
@@ -304,6 +390,7 @@ export class ServeDroidServer {
   public async stop(): Promise<void> {
     if (this.#stopping) return;
     this.#stopping = true;
+    this.#decodedFrames.close();
     await this.#video.stop();
     this.#recorder?.recordEvent("session-stop");
     await this.#recorder?.stop();
@@ -371,9 +458,20 @@ export class ServeDroidServer {
       } else if (url.pathname === "/api/v1/tree" && request.method === "GET") {
         json(response, 200, { schemaVersion: SCHEMA_VERSION, elements: await this.service.tree() });
       } else if (url.pathname === "/api/v1/screenshot" && request.method === "GET") {
-        const jpeg = await this.service.screenshot();
-        response.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
-        response.end(jpeg);
+        const capture = await this.captureAgentScreenshot();
+        const headers: Record<string, string> = {
+          "content-type": capture.mimeType,
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-serve-droid-screenshot-source": capture.source,
+          "x-serve-droid-screenshot-captured-at": capture.capturedAt,
+        };
+        if (capture.width !== null)
+          headers["x-serve-droid-screenshot-width"] = String(capture.width);
+        if (capture.height !== null)
+          headers["x-serve-droid-screenshot-height"] = String(capture.height);
+        response.writeHead(200, headers);
+        response.end(capture.data);
       } else if (url.pathname === "/api/v1/observe" && request.method === "GET") {
         const observation = await this.service.observe(url.searchParams.get("logsSince") ?? "0");
         json(response, 200, {
