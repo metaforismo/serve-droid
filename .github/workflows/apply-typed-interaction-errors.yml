@@ -1,0 +1,78 @@
+name: Apply typed interaction errors
+
+on:
+  push:
+    branches:
+      - feat/typed-interaction-errors
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10.28.0
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - name: Apply deterministic integration
+        run: python scripts/apply-typed-interaction-errors.py
+      - name: Format, lint, and run focused tests
+        run: |
+          pnpm exec eslint \
+            packages/core/src/actions.ts \
+            packages/core/src/errors.ts \
+            packages/core/src/index.ts \
+            packages/core/src/interaction-errors.ts \
+            packages/core/src/service.ts \
+            packages/core/test/interaction-errors.test.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts \
+            --fix
+          pnpm exec prettier --write \
+            .changeset/calm-android-errors.md \
+            README.md \
+            docs/TODO.md \
+            docs/interaction-errors.md \
+            packages/core/src/actions.ts \
+            packages/core/src/errors.ts \
+            packages/core/src/index.ts \
+            packages/core/src/interaction-errors.ts \
+            packages/core/src/service.ts \
+            packages/core/test/interaction-errors.test.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts
+          pnpm typecheck
+          pnpm exec vitest run \
+            packages/core/test/interaction-errors.test.ts \
+            packages/server/test/typed-input-errors.test.ts
+      - name: Commit integration when needed
+        shell: bash
+        run: |
+          git add \
+            .changeset/calm-android-errors.md \
+            README.md \
+            docs/TODO.md \
+            docs/interaction-errors.md \
+            packages/core/src/actions.ts \
+            packages/core/src/errors.ts \
+            packages/core/src/index.ts \
+            packages/core/src/interaction-errors.ts \
+            packages/core/src/service.ts \
+            packages/core/test/interaction-errors.test.ts \
+            packages/server/src/control.ts \
+            packages/server/test/typed-input-errors.test.ts
+          if git diff --cached --quiet; then
+            echo "Typed interaction errors are already integrated."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Integrate typed Android interaction errors"
+          git push origin HEAD:feat/typed-interaction-errors
