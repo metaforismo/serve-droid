@@ -27,7 +27,7 @@ interface BrandedServeDroidError {
 }
 
 export class ServeDroidError extends Error {
-  public static [Symbol.hasInstance](value: unknown): boolean {
+  public static override [Symbol.hasInstance](value: unknown): boolean {
     return (
       value instanceof Error &&
       (value as Partial<BrandedServeDroidError>)[SERVE_DROID_ERROR_BRAND] === true
