@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  PointerStreamClient,
-  PointerStreamError,
-} from "../src/pointer-stream.js";
+import { PointerStreamClient, PointerStreamError } from "../src/pointer-stream.js";
 
 class FakeSocket {
   public readyState = 0;
@@ -34,15 +31,12 @@ class FakeSocket {
 
 function phase(message: Record<string, unknown>): string | undefined {
   const gesture = message.gesture as
-    | { stream?: { phase?: string }; points?: Array<{ x: number; y: number }> }
-    | undefined;
+    { stream?: { phase?: string }; points?: Array<{ x: number; y: number }> } | undefined;
   return gesture?.stream?.phase;
 }
 
 function point(message: Record<string, unknown>): { x: number; y: number } | undefined {
-  const gesture = message.gesture as
-    | { points?: Array<{ x: number; y: number }> }
-    | undefined;
+  const gesture = message.gesture as { points?: Array<{ x: number; y: number }> } | undefined;
   return gesture?.points?.[0];
 }
 

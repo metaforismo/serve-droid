@@ -1,13 +1,7 @@
-import {
-  AndroidMotionEventAction,
-  type ScrcpyControlMessageWriter,
-} from "@yume-chan/scrcpy";
+import { AndroidMotionEventAction, type ScrcpyControlMessageWriter } from "@yume-chan/scrcpy";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Gesture, GestureStreamPhase } from "../../core/src/index.js";
-import {
-  LIVE_POINTER_STREAM_TIMEOUT_MS,
-  ScrcpyPointerController,
-} from "../src/control.js";
+import { LIVE_POINTER_STREAM_TIMEOUT_MS, ScrcpyPointerController } from "../src/control.js";
 
 type TouchMessage = Parameters<ScrcpyControlMessageWriter["injectTouch"]>[0];
 
@@ -19,12 +13,7 @@ class FakeWriter {
   }
 }
 
-function live(
-  id: string,
-  phase: GestureStreamPhase,
-  x: number,
-  y: number,
-): Gesture {
+function live(id: string, phase: GestureStreamPhase, x: number, y: number): Gesture {
   return { points: [{ x, y }], stream: { id, phase } };
 }
 
@@ -69,9 +58,9 @@ describe("live scrcpy pointer streams", () => {
 
     await control.gesture(live(id, "begin", 0.1, 0.1));
     await expect(control.tap(0.5, 0.5)).rejects.toMatchObject({ code: "TRANSPORT_FAILED" });
-    await expect(
-      control.gesture(live("fedcba9876543210", "move", 0.2, 0.2)),
-    ).rejects.toMatchObject({ code: "INVALID_ARGUMENT" });
+    await expect(control.gesture(live("fedcba9876543210", "move", 0.2, 0.2))).rejects.toMatchObject(
+      { code: "INVALID_ARGUMENT" },
+    );
     await control.gesture(live(id, "cancel", 0.1, 0.1));
 
     expect(actions(writer)).toEqual([

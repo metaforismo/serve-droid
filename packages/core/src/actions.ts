@@ -2,24 +2,14 @@ import { basename } from "node:path";
 import type { AdbRunner } from "./adb.js";
 import { checkedRun } from "./adb.js";
 import { ServeDroidError } from "./errors.js";
-import type {
-  DisplayInfo,
-  Gesture,
-  GesturePoint,
-  GestureStreamPhase,
-} from "./types.js";
+import type { DisplayInfo, Gesture, GesturePoint, GestureStreamPhase } from "./types.js";
 
 const ROTATION_TIMEOUT_MS = 5_000;
 const ROTATION_POLL_MS = 100;
 const MAX_GESTURE_POINTS = 64;
 const MAX_GESTURE_DURATION_MS = 60_000;
 const GESTURE_STREAM_ID = /^[A-Za-z0-9_-]{16,128}$/u;
-const GESTURE_STREAM_PHASES: readonly GestureStreamPhase[] = [
-  "begin",
-  "move",
-  "end",
-  "cancel",
-];
+const GESTURE_STREAM_PHASES: readonly GestureStreamPhase[] = ["begin", "move", "end", "cancel"];
 
 export interface ValidatedGestureStream {
   id: string;

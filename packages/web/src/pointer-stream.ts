@@ -274,10 +274,7 @@ export class PointerStreamClient {
           const socket = this.#socket;
           if (!socket || socket.readyState !== SOCKET_OPEN) {
             reject(
-              new PointerStreamError(
-                "TRANSPORT_FAILED",
-                "Live pointer control is not connected.",
-              ),
+              new PointerStreamError("TRANSPORT_FAILED", "Live pointer control is not connected."),
             );
             return;
           }
