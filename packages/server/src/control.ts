@@ -79,6 +79,12 @@ function validateGesture(gesture: Gesture): NormalizedPoint[] {
 
   let totalDurationMs = 0;
   const points = gesture.points.map((point, index) => {
+    if (!point || typeof point !== "object") {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        `gesture.points[${index}] must be an object.`,
+      );
+    }
     assertCoordinate(point.x, `gesture.points[${index}].x`);
     assertCoordinate(point.y, `gesture.points[${index}].y`);
     if (point.durationMs !== undefined) {
@@ -111,13 +117,13 @@ export class ScrcpyPointerController implements DevicePointerControl {
     private readonly wait: Delay = delay,
   ) {}
 
-  public tap(x: number, y: number): Promise<void> {
+  public async tap(x: number, y: number): Promise<void> {
     assertCoordinate(x, "x");
     assertCoordinate(y, "y");
-    return this.#enqueue(() => this.#tap({ x, y }));
+    await this.#enqueue(() => this.#tap({ x, y }));
   }
 
-  public swipe(
+  public async swipe(
     x1: number,
     y1: number,
     x2: number,
@@ -129,7 +135,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
     assertCoordinate(x2, "x2");
     assertCoordinate(y2, "y2");
     assertDuration(durationMs);
-    return this.#enqueue(() =>
+    await this.#enqueue(() =>
       this.#path([
         { x: x1, y: y1 },
         { x: x2, y: y2, durationMs },
@@ -137,9 +143,9 @@ export class ScrcpyPointerController implements DevicePointerControl {
     );
   }
 
-  public gesture(gesture: Gesture): Promise<void> {
+  public async gesture(gesture: Gesture): Promise<void> {
     const points = validateGesture(gesture);
-    return this.#enqueue(() => this.#path(points));
+    await this.#enqueue(() => this.#path(points));
   }
 
   #enqueue(operation: () => Promise<void>): Promise<void> {
