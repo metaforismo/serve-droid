@@ -1,0 +1,48 @@
+name: Format two-finger changes
+
+on:
+  push:
+    branches:
+      - feat/two-finger-gestures
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Format changed files
+        run: >-
+          pnpm exec prettier --write
+          .changeset/tidy-droids-pinch.md
+          docs/protocol.md
+          packages/core/src/actions.ts
+          packages/core/src/types.ts
+          packages/core/test/two-finger-gesture.test.ts
+          packages/server/src/control.ts
+          packages/server/test/control-routing.test.ts
+          packages/server/test/two-finger-control.test.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: formatted-two-finger
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            .changeset/tidy-droids-pinch.md
+            docs/protocol.md
+            packages/core/src/actions.ts
+            packages/core/src/types.ts
+            packages/core/test/two-finger-gesture.test.ts
+            packages/server/src/control.ts
+            packages/server/test/control-routing.test.ts
+            packages/server/test/two-finger-control.test.ts
