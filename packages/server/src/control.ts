@@ -34,13 +34,7 @@ type Delay = (milliseconds: number) => Promise<void>;
 
 export interface DevicePointerControl {
   tap(x: number, y: number): Promise<void>;
-  swipe(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    durationMs?: number,
-  ): Promise<void>;
+  swipe(x1: number, y1: number, x2: number, y2: number, durationMs?: number): Promise<void>;
   gesture(gesture: Gesture): Promise<void>;
 }
 
@@ -80,10 +74,7 @@ function validateGesture(gesture: Gesture): NormalizedPoint[] {
   let totalDurationMs = 0;
   const points = gesture.points.map((point, index) => {
     if (!point || typeof point !== "object") {
-      throw new ServeDroidError(
-        "INVALID_ARGUMENT",
-        `gesture.points[${index}] must be an object.`,
-      );
+      throw new ServeDroidError("INVALID_ARGUMENT", `gesture.points[${index}] must be an object.`);
     }
     assertCoordinate(point.x, `gesture.points[${index}].x`);
     assertCoordinate(point.y, `gesture.points[${index}].y`);
@@ -91,7 +82,9 @@ function validateGesture(gesture: Gesture): NormalizedPoint[] {
       assertDuration(point.durationMs, `gesture.points[${index}].durationMs`);
     }
     if (index > 0) totalDurationMs += point.durationMs ?? 100;
-    return { x: point.x, y: point.y, durationMs: point.durationMs };
+    return point.durationMs === undefined
+      ? { x: point.x, y: point.y }
+      : { x: point.x, y: point.y, durationMs: point.durationMs };
   });
 
   if (totalDurationMs > MAX_GESTURE_DURATION_MS) {
@@ -150,11 +143,9 @@ export class ScrcpyPointerController implements DevicePointerControl {
 
   #enqueue(operation: () => Promise<void>): Promise<void> {
     if (this.#pendingActions >= MAX_PENDING_ACTIONS) {
-      throw new ServeDroidError(
-        "TRANSPORT_FAILED",
-        "Too many scrcpy pointer actions are queued.",
-        { maxPendingActions: MAX_PENDING_ACTIONS },
-      );
+      throw new ServeDroidError("TRANSPORT_FAILED", "Too many scrcpy pointer actions are queued.", {
+        maxPendingActions: MAX_PENDING_ACTIONS,
+      });
     }
     this.#pendingActions += 1;
     const result = this.#tail.then(operation);
@@ -270,7 +261,9 @@ export class ScrcpyPointerController implements DevicePointerControl {
       active = false;
     } catch (error) {
       if (active) {
-        await this.#inject(AndroidMotionEventAction.Cancel, current, size, 0).catch(() => undefined);
+        await this.#inject(AndroidMotionEventAction.Cancel, current, size, 0).catch(
+          () => undefined,
+        );
       }
       throw new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
         cause: errorCause(error),
