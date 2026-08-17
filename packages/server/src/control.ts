@@ -16,6 +16,7 @@ const MAX_MOVE_MESSAGES = 120;
 const MAX_PENDING_ACTIONS = 8;
 const TARGET_MOVE_INTERVAL_MS = 16;
 const LIVE_POINTER_TIMEOUT_MS = 2_000;
+const TWO_FINGER_POINTER_IDS = [1n, 2n] as const;
 
 interface VideoSize {
   width: number;
@@ -32,6 +33,8 @@ interface PixelPoint {
   x: number;
   y: number;
 }
+
+type PixelPair = [PixelPoint, PixelPoint];
 
 interface LivePointerState {
   id: string;
@@ -117,7 +120,12 @@ export class ScrcpyPointerController implements DevicePointerControl {
       return;
     }
     const validated = validateGesture(gesture);
-    await this.#enqueue(() => this.#path(validated.points));
+    const secondaryPoints = validated.secondaryPoints;
+    await this.#enqueue(() =>
+      secondaryPoints
+        ? this.#twoFingerPath(validated.points, secondaryPoints)
+        : this.#path(validated.points),
+    );
   }
 
   #enqueue(operation: () => Promise<void>): Promise<void> {
@@ -171,10 +179,11 @@ export class ScrcpyPointerController implements DevicePointerControl {
     point: PixelPoint,
     size: VideoSize,
     pressure: number,
+    pointerId: TouchMessage["pointerId"] = ScrcpyPointerId.Finger,
   ): TouchMessage {
     return {
       action,
-      pointerId: ScrcpyPointerId.Finger,
+      pointerId,
       pointerX: point.x,
       pointerY: point.y,
       videoWidth: size.width,
@@ -190,8 +199,9 @@ export class ScrcpyPointerController implements DevicePointerControl {
     point: PixelPoint,
     size: VideoSize,
     pressure: number,
+    pointerId: TouchMessage["pointerId"] = ScrcpyPointerId.Finger,
   ): Promise<void> {
-    await this.writer.injectTouch(this.#message(action, point, size, pressure));
+    await this.writer.injectTouch(this.#message(action, point, size, pressure, pointerId));
   }
 
   #assertIdle(): void {
@@ -260,6 +270,103 @@ export class ScrcpyPointerController implements DevicePointerControl {
         );
       }
       throw this.#transportError(error);
+    }
+  }
+
+  async #twoFingerPath(
+    primaryPoints: readonly NormalizedPoint[],
+    secondaryPoints: readonly NormalizedPoint[],
+  ): Promise<void> {
+    this.#assertIdle();
+    const size = this.#size();
+    const segmentCount = primaryPoints.length - 1;
+    const maxStepsPerSegment = Math.max(1, Math.floor(MAX_MOVE_MESSAGES / segmentCount));
+    let current: PixelPair = [
+      this.#pixel(primaryPoints[0]!, size),
+      this.#pixel(secondaryPoints[0]!, size),
+    ];
+    const active = [false, false];
+
+    try {
+      for (const [pointerIndex, pointerId] of TWO_FINGER_POINTER_IDS.entries()) {
+        await this.#inject(AndroidMotionEventAction.Down, current[pointerIndex]!, size, 1, pointerId);
+        active[pointerIndex] = true;
+      }
+
+      for (let index = 1; index < primaryPoints.length; index += 1) {
+        const destinations: PixelPair = [
+          this.#pixel(primaryPoints[index]!, size),
+          this.#pixel(secondaryPoints[index]!, size),
+        ];
+        const durationMs = primaryPoints[index]!.durationMs ?? 100;
+        const steps = Math.max(
+          1,
+          Math.min(maxStepsPerSegment, Math.ceil(durationMs / TARGET_MOVE_INTERVAL_MS)),
+        );
+        const origins: PixelPair = [{ ...current[0] }, { ...current[1] }];
+        for (let step = 1; step <= steps; step += 1) {
+          await this.wait(durationMs / steps);
+          current = origins.map((origin, pointerIndex) => {
+            const destination = destinations[pointerIndex]!;
+            return {
+              x: Math.round(origin.x + ((destination.x - origin.x) * step) / steps),
+              y: Math.round(origin.y + ((destination.y - origin.y) * step) / steps),
+            };
+          }) as PixelPair;
+          for (const [pointerIndex, pointerId] of TWO_FINGER_POINTER_IDS.entries()) {
+            await this.#inject(
+              AndroidMotionEventAction.Move,
+              current[pointerIndex]!,
+              size,
+              1,
+              pointerId,
+            );
+          }
+        }
+      }
+
+      for (let pointerIndex = TWO_FINGER_POINTER_IDS.length - 1; pointerIndex >= 0; pointerIndex -= 1) {
+        await this.#inject(
+          AndroidMotionEventAction.Up,
+          current[pointerIndex]!,
+          size,
+          0,
+          TWO_FINGER_POINTER_IDS[pointerIndex]!,
+        );
+        active[pointerIndex] = false;
+      }
+    } catch (error) {
+      await this.#abortTwoFinger(current, size, active);
+      throw this.#transportError(error);
+    }
+  }
+
+  async #abortTwoFinger(
+    points: PixelPair,
+    size: VideoSize,
+    active: readonly boolean[],
+  ): Promise<void> {
+    const activeIndexes = active.flatMap((isActive, index) => (isActive ? [index] : []));
+    const cancelIndex = activeIndexes.at(-1);
+    if (cancelIndex === undefined) return;
+
+    await this.#inject(
+      AndroidMotionEventAction.Cancel,
+      points[cancelIndex]!,
+      size,
+      0,
+      TWO_FINGER_POINTER_IDS[cancelIndex]!,
+    ).catch(() => undefined);
+
+    for (let index = activeIndexes.length - 1; index >= 0; index -= 1) {
+      const pointerIndex = activeIndexes[index]!;
+      await this.#inject(
+        AndroidMotionEventAction.Up,
+        points[pointerIndex]!,
+        size,
+        0,
+        TWO_FINGER_POINTER_IDS[pointerIndex]!,
+      ).catch(() => undefined);
     }
   }
 
