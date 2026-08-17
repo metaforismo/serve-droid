@@ -333,6 +333,10 @@ export async function probeBrowser(options: BrowserProbeOptions = {}): Promise<B
       reject(error);
     };
   });
+  // A custom launcher may wait for the POST response before returning. Attach a handler
+  // immediately so an invalid report is never temporarily unhandled; callers still await
+  // the original promise below and receive the typed failure.
+  void resultPromise.catch(() => undefined);
 
   const server = createServer((request, response) => {
     void (async () => {
