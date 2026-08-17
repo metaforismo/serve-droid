@@ -60,9 +60,9 @@ describe("ScrcpyPointerController", () => {
 
     expect(actions(writer)[0]).toBe(AndroidMotionEventAction.Down);
     expect(actions(writer).at(-1)).toBe(AndroidMotionEventAction.Up);
-    expect(actions(writer).filter((action) => action === AndroidMotionEventAction.Move)).toHaveLength(
-      10,
-    );
+    expect(
+      actions(writer).filter((action) => action === AndroidMotionEventAction.Move),
+    ).toHaveLength(10);
     expect(writer.messages.at(-1)).toMatchObject({ pointerX: 999, pointerY: 200, pressure: 0 });
     expect(waits.reduce((total, value) => total + value, 0)).toBeCloseTo(160);
   });
@@ -83,15 +83,15 @@ describe("ScrcpyPointerController", () => {
       ],
     });
 
-    expect(actions(writer).filter((action) => action === AndroidMotionEventAction.Down)).toHaveLength(
-      1,
-    );
+    expect(
+      actions(writer).filter((action) => action === AndroidMotionEventAction.Down),
+    ).toHaveLength(1);
     expect(actions(writer).filter((action) => action === AndroidMotionEventAction.Up)).toHaveLength(
       1,
     );
-    expect(actions(writer).filter((action) => action === AndroidMotionEventAction.Move)).toHaveLength(
-      4,
-    );
+    expect(
+      actions(writer).filter((action) => action === AndroidMotionEventAction.Move),
+    ).toHaveLength(4);
     expect(writer.messages.at(-1)).toMatchObject({ pointerX: 359, pointerY: 160 });
   });
 
