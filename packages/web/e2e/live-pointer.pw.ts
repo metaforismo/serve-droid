@@ -4,6 +4,12 @@ declare global {
   interface Window {
     __livePointerMessages: Array<Record<string, unknown>>;
     __livePointerControlOpen: boolean;
+    __livePointerEvents: Array<{
+      type: string;
+      pointerId: number;
+      target: string;
+      buttons: number;
+    }>;
   }
 }
 
@@ -22,6 +28,25 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
     });
     window.__livePointerMessages = [];
     window.__livePointerControlOpen = false;
+    window.__livePointerEvents = [];
+    for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel"]) {
+      window.addEventListener(
+        type,
+        (event) => {
+          const pointer = event as PointerEvent;
+          window.__livePointerEvents.push({
+            type,
+            pointerId: pointer.pointerId,
+            target:
+              pointer.target instanceof HTMLElement
+                ? pointer.target.getAttribute("aria-label") ?? pointer.target.tagName
+                : "unknown",
+            buttons: pointer.buttons,
+          });
+        },
+        true,
+      );
+    }
 
     class MockWebSocket {
       public static readonly CONNECTING = 0;
@@ -129,6 +154,15 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
   await expect.poll(() => page.evaluate(() => window.__livePointerControlOpen)).toBe(true);
 }
 
+function phases(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    window.__livePointerMessages.flatMap((message) => {
+      const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
+      return gesture?.stream?.phase ? [gesture.stream.phase] : [];
+    }),
+  );
+}
+
 test("forwards drag movement before pointer release without duplicating the HTTP action", async ({
   page,
 }) => {
@@ -140,43 +174,28 @@ test("forwards drag movement before pointer release without duplicating the HTTP
 
   await page.mouse.move(bounds!.x + bounds!.width * 0.35, bounds!.y + bounds!.height * 0.7);
   await page.mouse.down();
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__livePointerMessages.map((message) => {
-          const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
-          return gesture?.stream?.phase;
-        }),
-      ),
-    )
-    .toContain("begin");
+  await expect.poll(() => phases(page)).toContain("begin");
 
   await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.3, {
     steps: 5,
   });
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__livePointerMessages.map((message) => {
-          const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
-          return gesture?.stream?.phase;
-        }),
-      ),
-    )
-    .toContain("move");
+  await expect.poll(() => phases(page)).toContain("move");
   expect(actions).toHaveLength(0);
 
   await page.mouse.up();
   await expect
-    .poll(() =>
-      page.evaluate(() =>
-        window.__livePointerMessages.map((message) => {
+    .poll(async () => {
+      const diagnostic = await page.evaluate(() => ({
+        phases: window.__livePointerMessages.flatMap((message) => {
           const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
-          return gesture?.stream?.phase;
+          return gesture?.stream?.phase ? [gesture.stream.phase] : [];
         }),
-      ),
-    )
-    .toContain("end");
+        events: window.__livePointerEvents,
+        feedback: document.querySelector('[data-testid="live-pointer-feedback"]')?.textContent ?? "",
+      }));
+      return diagnostic.phases.includes("end") ? "end" : JSON.stringify(diagnostic);
+    })
+    .toBe("end");
   expect(actions).toHaveLength(0);
   await expect(page.getByTestId("live-pointer-feedback")).toContainText("Live drag completed");
 });
