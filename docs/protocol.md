@@ -23,14 +23,41 @@ Rotation actions complete only after the device reports the requested logical or
 display metadata does not settle within five seconds, the action fails instead of allowing a later
 normalized coordinate action to use stale dimensions.
 
-Tap, swipe, and multi-point gesture requests use the control writer from the active scrcpy video
-session whenever it is available. Normalized coordinates are mapped against a snapshot of that
-encoded frame's dimensions. One finger lifecycle is serialized, generated move messages and queued
-actions are bounded, and an active failed gesture receives a best-effort cancel. ADB input is the
-startup and helper-replacement fallback only. Once scrcpy injection begins, an error is returned as
+Tap, swipe, and gesture requests use the control writer from the active scrcpy video session whenever
+it is available. Normalized coordinates are mapped against a snapshot of that encoded frame's
+dimensions. Pointer lifecycles are serialized, generated move messages and queued actions are
+bounded, and an active failed gesture receives best-effort cleanup. ADB input is the startup and
+helper-replacement fallback only. Once scrcpy injection begins, an error is returned as
 `TRANSPORT_FAILED`; the action is not replayed through ADB because doing so could duplicate a tap or
 complete only part of a gesture. Browser wheel and trackpad bursts are coalesced into swipe actions,
 so they use the same control path without creating one device command per browser event.
+
+A two-finger request adds `secondaryPoints` to the existing gesture envelope:
+
+```json
+{
+  "type": "gesture",
+  "gesture": {
+    "points": [
+      { "x": 0.4, "y": 0.5 },
+      { "x": 0.2, "y": 0.5, "durationMs": 240 }
+    ],
+    "secondaryPoints": [
+      { "x": 0.6, "y": 0.5 },
+      { "x": 0.8, "y": 0.5 }
+    ]
+  }
+}
+```
+
+The two arrays must contain the same 2–64 positions. Durations belong only to `points` and define one
+shared timeline for both fingers; `secondaryPoints` must contain coordinates only. The controller
+captures the encoded dimensions once, assigns two stable positive scrcpy pointer IDs, presses the
+primary then secondary pointer, emits bounded synchronized moves, and releases the secondary then
+primary pointer. A partial failure sends one aggregate cancel followed by reverse-order releases to
+clear scrcpy's pointer state. When no scrcpy controller is ready, this request fails before device
+input with `TRANSPORT_FAILED` and `details.safeToFallback: false`; two fingers are never approximated
+as sequential ADB swipes.
 
 The browser cockpit additionally streams a direct pointer lifecycle over `/api/v1/control` using the
 existing gesture action envelope:
@@ -48,10 +75,11 @@ existing gesture action envelope:
 }
 ```
 
-`phase` is `begin`, `move`, `end`, or `cancel`; every message contains exactly one normalized point.
-The browser serializes responses and coalesces pending moves to the newest point. The stream id must
-contain 16–128 URL-safe characters and owns one exclusive scrcpy finger lifecycle. Frame dimensions
-are captured at `begin` and remain fixed until termination.
+`phase` is `begin`, `move`, `end`, or `cancel`; every message contains exactly one normalized point
+and must not include `secondaryPoints`. The browser serializes responses and coalesces pending moves
+to the newest point. The stream id must contain 16–128 URL-safe characters and owns one exclusive
+scrcpy finger lifecycle. Frame dimensions are captured at `begin` and remain fixed until
+termination.
 
 When no scrcpy controller is ready, the ADB adapter rejects `begin` as `TRANSPORT_FAILED` with
 `details.safeToFallback: true` before issuing any device command. The browser may then use its
