@@ -31,11 +31,8 @@ jobs:
         run: |
           python3 scripts/apply-decoded-frame-server-web.py
           python3 scripts/apply-decoded-frame-mcp.py
-      - name: Typecheck affected packages
-        run: |
-          pnpm --filter @serve-droid/server typecheck
-          pnpm --filter @serve-droid/web typecheck
-          pnpm --filter @serve-droid/mcp typecheck
+      - name: Typecheck project graph
+        run: pnpm typecheck
       - name: Run decoded-frame focused tests
         run: >-
           pnpm exec vitest run
