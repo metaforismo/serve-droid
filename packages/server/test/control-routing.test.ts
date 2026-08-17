@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import { ServeDroidError } from "@serve-droid/core";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   AndroidService,
-  ServeDroidError,
   type AdbRunner,
   type DeviceSummary,
   type Gesture,
@@ -169,6 +169,28 @@ describe("pointer transport routing", () => {
 
     expect((await postAction(server, { type: "tap", x: 0.5, y: 0.25 })).status).toBe(200);
     expect(adb.calls).toContainEqual(["shell", "input", "tap", "540", "480"]);
+  });
+
+  it("rejects an oversized fallback gesture before issuing any ADB input", async () => {
+    const adb = new FakeAdb();
+    const server = new ServeDroidServer(new AndroidService(adb, device), {
+      token: "test-token",
+      videoSource: new FakeVideo(),
+    });
+    servers.push(server);
+    const points = Array.from({ length: 65 }, (_, index) => ({
+      x: index / 64,
+      y: 0.5,
+      durationMs: 1,
+    }));
+
+    const response = await postAction(server, { type: "gesture", gesture: { points } });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_ARGUMENT", message: "A gesture must not exceed 64 points." },
+    });
+    expect(usedAdbInput(adb.calls)).toBe(false);
   });
 
   it("does not replay a failed scrcpy pointer action through ADB", async () => {
