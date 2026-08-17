@@ -124,18 +124,7 @@ export class PointerStreamClient {
     if (!this.#activeId || !this.#acceptMoves) return;
     this.#currentPoint = point;
     this.#latestMove = point;
-    if (this.#moveLoop) return;
-    const loop = this.#flushMoves().catch((error: unknown) => {
-      const failure = this.#asError(error);
-      this.#activeFailure = failure;
-      this.#activeId = undefined;
-      this.#acceptMoves = false;
-      this.#stopHeartbeat();
-      this.options.onError?.(failure);
-    });
-    this.#moveLoop = loop.finally(() => {
-      this.#moveLoop = undefined;
-    });
+    this.#startMoveLoop();
   }
 
   public async end(point: PointerPoint): Promise<void> {
@@ -172,6 +161,22 @@ export class PointerStreamClient {
     } finally {
       this.#clearActive();
     }
+  }
+
+  #startMoveLoop(): void {
+    if (this.#moveLoop || !this.#activeId || !this.#acceptMoves || !this.#latestMove) return;
+    const loop = this.#flushMoves().catch((error: unknown) => {
+      const failure = this.#asError(error);
+      this.#activeFailure = failure;
+      this.#activeId = undefined;
+      this.#acceptMoves = false;
+      this.#stopHeartbeat();
+      this.options.onError?.(failure);
+    });
+    this.#moveLoop = loop.finally(() => {
+      this.#moveLoop = undefined;
+      if (this.#activeId && this.#acceptMoves && this.#latestMove) this.#startMoveLoop();
+    });
   }
 
   async #flushMoves(): Promise<void> {
