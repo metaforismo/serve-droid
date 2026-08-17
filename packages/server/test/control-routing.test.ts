@@ -86,6 +86,10 @@ function ok(stdout: string): RunResult {
   return { stdout, stderr: "", exitCode: 0 };
 }
 
+function usedAdbInput(calls: string[][]): boolean {
+  return calls.some((call) => call[0] === "shell" && call[1] === "input");
+}
+
 const device: DeviceSummary = {
   serial: "serial",
   state: "device",
@@ -152,7 +156,7 @@ describe("pointer transport routing", () => {
     expect(control.taps).toEqual([[0.25, 0.75]]);
     expect(control.swipes).toEqual([[0.2, 0.8, 0.2, 0.2, 180]]);
     expect(control.gestures).toEqual([gesture]);
-    expect(adb.calls.some((call) => call.includes("input"))).toBe(false);
+    expect(usedAdbInput(adb.calls)).toBe(false);
   });
 
   it("uses the existing bounded ADB action path when scrcpy control is unavailable", async () => {
@@ -183,6 +187,6 @@ describe("pointer transport routing", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "TRANSPORT_FAILED", message: "scrcpy control failed" },
     });
-    expect(adb.calls.some((call) => call.includes("input"))).toBe(false);
+    expect(usedAdbInput(adb.calls)).toBe(false);
   });
 });
