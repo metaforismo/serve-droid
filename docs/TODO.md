@@ -130,7 +130,7 @@ because its code path compiles.
 - [x] Unit-test ADB parsing, selection, transforms, gestures, hierarchy, matching, logs, and redaction.
 - [x] Test HTTP authentication and vendored scrcpy checksum.
 - [x] Configure a pinned Linux Android emulator CI job.
-- [ ] Add Gradle Wrapper files and build the fixture APK in CI.
+- [x] Add Gradle Wrapper files and build the fixture APK in CI.
 - [ ] Execute the complete install-launch-observe-act-crash-log-relaunch agent scenario.
 - [ ] Test helper crash, stale state, port conflict, disconnect, reconnect, malformed XML, and large logs.
 - [ ] Verify one emulator and one USB device on macOS.
