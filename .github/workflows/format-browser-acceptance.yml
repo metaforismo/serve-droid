@@ -1,0 +1,43 @@
+name: Format browser acceptance
+
+on:
+  push:
+    branches:
+      - test/browser-acceptance-suites
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[acceptance-formatted]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PNPM_VERSION: 10.28.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test/browser-acceptance-suites
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Format acceptance suite
+        run: pnpm exec prettier --write packages/web/e2e/acceptance.pw.ts
+      - name: Commit canonical formatting
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/web/e2e/acceptance.pw.ts
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Already formatted.'
+            exit 0
+          fi
+          git commit -m 'Format XHR acceptance update [acceptance-formatted]'
+          git push origin HEAD:test/browser-acceptance-suites
