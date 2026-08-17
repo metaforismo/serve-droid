@@ -8,13 +8,7 @@ const KEYGUARD_DIAGNOSTIC_TIMEOUT_MS = 3_000;
 const MAX_EVIDENCE = 12;
 
 export type InteractionOperation =
-  | "tap"
-  | "swipe"
-  | "gesture"
-  | "type"
-  | "key"
-  | "ui-hierarchy"
-  | "screenshot";
+  "tap" | "swipe" | "gesture" | "type" | "key" | "ui-hierarchy" | "screenshot";
 
 export interface KeyguardDiagnostics {
   showing: boolean | null;
@@ -43,12 +37,7 @@ const ALLOWED_FIELDS: Record<KeyguardBlock, ReadonlySet<string>> = {
     "mKeyguardSecure",
   ]),
   monitor: new Set(["mIsShowing", "mInputRestricted", "mSimSecure"]),
-  controller: new Set([
-    "mKeyguardShowing",
-    "mKeyguardGoingAway",
-    "mOccluded",
-    "mAodShowing",
-  ]),
+  controller: new Set(["mKeyguardShowing", "mKeyguardGoingAway", "mOccluded", "mAodShowing"]),
 };
 
 function headerBlock(value: string): KeyguardBlock | null {
@@ -139,20 +128,13 @@ export function parseKeyguardDiagnostics(output: string): KeyguardDiagnostics {
     fields.delegate.inputRestricted,
     fields.monitor.mInputRestricted,
   ]);
-  const delegateSecure = knownBoolean([
-    fields.delegate.secure,
-    fields.delegate.mKeyguardSecure,
-  ]);
+  const delegateSecure = knownBoolean([fields.delegate.secure, fields.delegate.mKeyguardSecure]);
   const secure =
-    delegateSecure !== null
-      ? delegateSecure
-      : fields.monitor.mSimSecure === true
-        ? true
-        : null;
+    delegateSecure !== null ? delegateSecure : fields.monitor.mSimSecure === true ? true : null;
   const locked =
     inputRestricted === true || showing === true || aodShowing === true
       ? true
-      : inputRestricted === false && showing === false && aodShowing !== true
+      : showing === false
         ? false
         : null;
 
@@ -230,7 +212,8 @@ function boundedMessage(value: string): string {
 
 function failureMessage(value: unknown): string {
   if (typeof value === "string") return boundedMessage(value);
-  if (value instanceof ServeDroidError || value instanceof Error) return boundedMessage(value.message);
+  if (value instanceof ServeDroidError || value instanceof Error)
+    return boundedMessage(value.message);
   return boundedMessage(String(value));
 }
 
@@ -239,10 +222,7 @@ function resultFailureMessage(result: RunResult): string {
 }
 
 export function inputRestrictionEvidence(message: string): string | null {
-  const normalized = message
-    .slice(0, MAX_CLASSIFICATION_INPUT)
-    .toLocaleLowerCase()
-    .replace(/\s+/gu, " ");
+  const normalized = message.slice(0, MAX_CLASSIFICATION_INPUT).toLowerCase().replace(/\s+/gu, " ");
 
   if (
     /\binject(?:ing)?\b.{0,100}\brequires?\b.{0,100}\binject_events?\b/u.test(normalized) ||
@@ -335,10 +315,11 @@ export async function runInteractionCommand(
   args: readonly string[],
   options: InteractionCommandOptions,
 ): Promise<string> {
-  const result = await adb.run(args, {
-    serial: options.serial,
-    timeoutMs: options.timeoutMs,
-  });
+  const runOptions =
+    options.timeoutMs === undefined
+      ? { serial: options.serial }
+      : { serial: options.serial, timeoutMs: options.timeoutMs };
+  const result = await adb.run(args, runOptions);
   if (result.exitCode === 0) return result.stdout;
   throw await diagnoseInteractionError(
     adb,

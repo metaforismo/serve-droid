@@ -6,6 +6,7 @@ import {
 } from "@yume-chan/scrcpy";
 import {
   ServeDroidError,
+  inputRestrictionError,
   validateGesture,
   validateGestureStream,
   type Gesture,
@@ -487,8 +488,14 @@ export class ScrcpyPointerController implements DevicePointerControl {
   }
 
   #transportError(error: unknown, phase?: string): ServeDroidError {
+    const cause = errorCause(error);
+    const restricted = inputRestrictionError(cause, {
+      transport: "scrcpy",
+      ...(phase ? { phase } : {}),
+    });
+    if (restricted) return restricted;
     return new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
-      cause: errorCause(error),
+      cause,
       ...(phase ? { phase } : {}),
     });
   }

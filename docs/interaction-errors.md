@@ -5,13 +5,13 @@ specific diagnosis. A `SecurityException` by itself is not enough to classify a 
 
 ## Stable error codes
 
-| Code               | Meaning                                                                                  | Retry guidance                         |
-| ------------------ | ---------------------------------------------------------------------------------------- | -------------------------------------- |
-| `DEVICE_LOCKED`    | A failed interaction was followed by explicit keyguard showing or input-restricted state | Wake and unlock the device, then retry |
-| `SECURE_SCREEN`    | The same keyguard evidence also reports a secure lock screen                              | Unlock the device, then retry          |
-| `INPUT_RESTRICTED` | Android or an OEM/enterprise policy explicitly rejected input injection                   | Change the device policy or test device |
-| `ADB_FAILED`       | No safe, specific classification was available                                            | Inspect the bounded Android message    |
-| `TRANSPORT_FAILED` | A scrcpy control transport failed without an explicit Android policy rejection            | Reconnect or restart the session       |
+| Code               | Meaning                                                                                  | Retry guidance                          |
+| ------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------- |
+| `DEVICE_LOCKED`    | A failed interaction was followed by explicit keyguard showing or input-restricted state | Wake and unlock the device, then retry  |
+| `SECURE_SCREEN`    | The same keyguard evidence also reports a secure lock screen                             | Unlock the device, then retry           |
+| `INPUT_RESTRICTED` | Android or an OEM/enterprise policy explicitly rejected input injection                  | Change the device policy or test device |
+| `ADB_FAILED`       | No safe, specific classification was available                                           | Inspect the bounded Android message     |
+| `TRANSPORT_FAILED` | A scrcpy control transport failed without an explicit Android policy rejection           | Reconnect or restart the session        |
 
 These codes use the existing device-error CLI exit status. HTTP and control-WebSocket responses keep
 the same versioned error envelope and include structured `details` such as the operation, serial,

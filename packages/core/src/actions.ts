@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import type { AdbRunner } from "./adb.js";
 import { checkedRun } from "./adb.js";
 import { ServeDroidError } from "./errors.js";
+import { runInteractionCommand } from "./interaction-errors.js";
 import type { DisplayInfo, Gesture, GesturePoint, GestureStreamPhase } from "./types.js";
 
 const ROTATION_TIMEOUT_MS = 5_000;
@@ -196,12 +197,10 @@ export class AndroidActions {
     assertCoordinate(x, "x");
     assertCoordinate(y, "y");
     const display = await this.getDisplay();
-    await checkedRun(
+    await runInteractionCommand(
       this.adb,
       ["shell", "input", "tap", pixel(x, display.width), pixel(y, display.height)],
-      {
-        serial: this.serial,
-      },
+      { serial: this.serial, operation: "tap" },
     );
   }
 
@@ -215,7 +214,7 @@ export class AndroidActions {
     [x1, y1, x2, y2].forEach((value, index) => assertCoordinate(value, `coordinate ${index + 1}`));
     assertDuration(durationMs);
     const display = await this.getDisplay();
-    await checkedRun(
+    await runInteractionCommand(
       this.adb,
       [
         "shell",
@@ -227,7 +226,7 @@ export class AndroidActions {
         pixel(y2, display.height),
         String(durationMs),
       ],
-      { serial: this.serial },
+      { serial: this.serial, operation: "swipe" },
     );
   }
 
@@ -268,13 +267,19 @@ export class AndroidActions {
       );
     }
     const escaped = text.replaceAll("%", "%25").replaceAll(" ", "%s");
-    await checkedRun(this.adb, ["shell", "input", "text", escaped], { serial: this.serial });
+    await runInteractionCommand(this.adb, ["shell", "input", "text", escaped], {
+      serial: this.serial,
+      operation: "type",
+    });
   }
 
   public async key(key: keyof typeof KEY_CODES): Promise<void> {
     const code = KEY_CODES[key];
     if (!code) throw new ServeDroidError("INVALID_ARGUMENT", `Unsupported key '${key}'.`);
-    await checkedRun(this.adb, ["shell", "input", "keyevent", code], { serial: this.serial });
+    await runInteractionCommand(this.adb, ["shell", "input", "keyevent", code], {
+      serial: this.serial,
+      operation: "key",
+    });
   }
 
   public async rotate(

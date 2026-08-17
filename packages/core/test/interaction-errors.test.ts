@@ -1,6 +1,7 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
+  errorExitCode,
   inputRestrictionError,
   inputRestrictionEvidence,
   parseKeyguardDiagnostics,
@@ -211,14 +212,10 @@ describe("interaction command errors", () => {
       { stdout: unlockedKeyguardDump, stderr: "", exitCode: 0 },
     ]);
 
-    const failure = runInteractionCommand(
-      adb,
-      ["shell", "input", "text", "private%smessage"],
-      {
-        serial: "device-1",
-        operation: "type",
-      },
-    ).catch((error: unknown) => error);
+    const failure = runInteractionCommand(adb, ["shell", "input", "text", "private%smessage"], {
+      serial: "device-1",
+      operation: "type",
+    }).catch((error: unknown) => error);
 
     await expect(failure).resolves.toMatchObject({
       code: "ADB_FAILED",
@@ -242,5 +239,14 @@ describe("interaction command errors", () => {
       }),
     ).rejects.toMatchObject({ code: "ADB_FAILED", message: "input command failed" });
     expect(adb.calls).toHaveLength(3);
+  });
+});
+
+describe("typed interaction error exit status", () => {
+  it("uses the stable device-error status", () => {
+    const restricted = inputRestrictionError(
+      "Injecting to another application requires INJECT_EVENTS permission",
+    )!;
+    expect(errorExitCode(restricted)).toBe(20);
   });
 });

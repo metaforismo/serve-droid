@@ -5,6 +5,7 @@ import { getDisplayInfo, listDevices, selectDevice } from "./devices.js";
 import { LogBuffer, parseLogLine } from "./logs.js";
 import { parseUiHierarchy } from "./ui-tree.js";
 import { ServeDroidError } from "./errors.js";
+import { diagnoseInteractionError, runInteractionCommand } from "./interaction-errors.js";
 import type {
   DeviceSummary,
   DisplayInfo,
@@ -228,10 +229,15 @@ export class AndroidService {
   }
 
   async #dumpHierarchy(display: DisplayInfo): Promise<UiElement[]> {
-    const xml = await checkedRun(this.adb, ["exec-out", "uiautomator", "dump", "/dev/tty"], {
-      serial: this.device.serial,
-      timeoutMs: 10_000,
-    });
+    const xml = await runInteractionCommand(
+      this.adb,
+      ["exec-out", "uiautomator", "dump", "/dev/tty"],
+      {
+        serial: this.device.serial,
+        timeoutMs: 10_000,
+        operation: "ui-hierarchy",
+      },
+    );
     const start = xml.indexOf("<?xml");
     return parseUiHierarchy(start >= 0 ? xml.slice(start) : xml, display);
   }
@@ -271,10 +277,15 @@ export class AndroidService {
   }
 
   public async screenshot(options: { width?: number; quality?: number } = {}): Promise<Buffer> {
-    const png = await this.adb.capture(["exec-out", "screencap", "-p"], {
-      serial: this.device.serial,
-      timeoutMs: 10_000,
-    });
+    let png: Buffer;
+    try {
+      png = await this.adb.capture(["exec-out", "screencap", "-p"], {
+        serial: this.device.serial,
+        timeoutMs: 10_000,
+      });
+    } catch (error) {
+      throw await diagnoseInteractionError(this.adb, this.device.serial, "screenshot", error);
+    }
     const { default: sharp } = await import("sharp");
     const pipeline = sharp(png).rotate();
     if (options.width) pipeline.resize({ width: options.width, withoutEnlargement: true });
