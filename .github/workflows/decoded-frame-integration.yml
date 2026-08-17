@@ -10,9 +10,9 @@ permissions:
 
 jobs:
   integrate:
-    if: ${{ !contains(github.event.head_commit.message, 'Integrate decoded stream screenshot routing') }}
+    if: ${{ !contains(github.event.head_commit.message, '[decoded-frame-generated]') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PNPM_VERSION: 10.28.0
     steps:
@@ -31,26 +31,20 @@ jobs:
         run: |
           python3 scripts/apply-decoded-frame-server-web.py
           python3 scripts/apply-decoded-frame-mcp.py
-      - name: Typecheck project graph
-        run: pnpm typecheck
-      - name: Run decoded-frame focused tests
-        run: >-
-          pnpm exec vitest run
-          packages/server/test/decoded-frame.test.ts
-          packages/server/test/decoded-frame-routing.test.ts
-          packages/web/test/decoded-frame.test.ts
-          packages/web/test/decoded-frame-capture.test.ts
-          packages/web/test/screenshot.test.ts
-          packages/mcp/test/server.test.ts
-      - name: Commit integrated sources
+          if [ -f scripts/harden-decoded-frame.py ]; then
+            python3 scripts/harden-decoded-frame.py
+          fi
+      - name: Verify repository
+        run: pnpm verify
+      - name: Commit generated product changes
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add packages/server/src/index.ts packages/server/src/server.ts packages/web/src/App.tsx packages/mcp/src/server.ts packages/mcp/test/server.test.ts
+          git add packages docs/screenshots.md docs/protocol.md
           git diff --cached --check
           if git diff --cached --quiet; then
-            echo 'No integration changes were needed.'
+            echo 'No generated product changes were needed.'
             exit 0
           fi
-          git commit -m 'Integrate decoded stream screenshot routing'
+          git commit -m 'Harden decoded stream screenshot protocol [decoded-frame-generated]'
           git push origin HEAD:feat/decoded-stream-screenshots
