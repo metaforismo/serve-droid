@@ -16,6 +16,7 @@ interface PointerNotice {
 
 interface ActivePointer {
   pointerId: number;
+  pointerType: string;
   canvas: HTMLCanvasElement;
   startedAt: number;
   start: PointerPoint;
@@ -23,6 +24,11 @@ interface ActivePointer {
   dragging: boolean;
   mode: "pending" | "stream" | "fallback" | "failed";
   begin: Promise<boolean>;
+}
+
+interface ClientPosition {
+  clientX: number;
+  clientY: number;
 }
 
 const DEVICE_CANVAS_LABEL = "Live Android device.";
@@ -35,16 +41,16 @@ function deviceCanvas(target: EventTarget | null): HTMLCanvasElement | null {
   return target.getAttribute("aria-label")?.startsWith(DEVICE_CANVAS_LABEL) ? target : null;
 }
 
-function pointOnCanvas(canvas: HTMLCanvasElement, event: PointerEvent): PointerPoint | null {
+function pointOnCanvas(canvas: HTMLCanvasElement, position: ClientPosition): PointerPoint | null {
   const bounds = canvas.getBoundingClientRect();
   if (bounds.width <= 0 || bounds.height <= 0) return null;
   return {
-    x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
-    y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height)),
+    x: Math.min(1, Math.max(0, (position.clientX - bounds.left) / bounds.width)),
+    y: Math.min(1, Math.max(0, (position.clientY - bounds.top) / bounds.height)),
   };
 }
 
-function consume(event: PointerEvent): void {
+function consume(event: Event): void {
   event.preventDefault();
   event.stopPropagation();
 }
@@ -138,6 +144,34 @@ export function LivePointerInput() {
       showNotice({ kind: "sent", message: "Swipe sent through bounded fallback" }, SENT_NOTICE_MS);
     }
 
+    function finishPointer(pointer: ActivePointer, point: PointerPoint): void {
+      if (active !== pointer) return;
+      active = null;
+      releaseCapture(pointer);
+      removeIndicator();
+
+      void (async () => {
+        try {
+          const streamed = await pointer.begin;
+          if (pointer.mode === "failed") return;
+          if (streamed) {
+            await client.end(point);
+            showNotice(
+              {
+                kind: "sent",
+                message: pointer.dragging ? "Live drag completed" : "Live tap completed",
+              },
+              SENT_NOTICE_MS,
+            );
+          } else {
+            await sendFallback(pointer, point);
+          }
+        } catch (error) {
+          errorNotice(error);
+        }
+      })();
+    }
+
     const onPointerDown = (event: PointerEvent) => {
       const canvas = deviceCanvas(event.target);
       if (
@@ -161,6 +195,7 @@ export function LivePointerInput() {
 
       const pointer: ActivePointer = {
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
         canvas,
         startedAt: performance.now(),
         start: point,
@@ -214,30 +249,15 @@ export function LivePointerInput() {
       if (!pointer || pointer.pointerId !== event.pointerId) return;
       const point = pointOnCanvas(pointer.canvas, event) ?? pointer.latest;
       consume(event);
-      active = null;
-      releaseCapture(pointer);
-      removeIndicator();
+      finishPointer(pointer, point);
+    };
 
-      void (async () => {
-        try {
-          const streamed = await pointer.begin;
-          if (pointer.mode === "failed") return;
-          if (streamed) {
-            await client.end(point);
-            showNotice(
-              {
-                kind: "sent",
-                message: pointer.dragging ? "Live drag completed" : "Live tap completed",
-              },
-              SENT_NOTICE_MS,
-            );
-          } else {
-            await sendFallback(pointer, point);
-          }
-        } catch (error) {
-          errorNotice(error);
-        }
-      })();
+    const onMouseUp = (event: MouseEvent) => {
+      const pointer = active;
+      if (!pointer || pointer.pointerType !== "mouse" || event.button !== 0) return;
+      const point = pointOnCanvas(pointer.canvas, event) ?? pointer.latest;
+      consume(event);
+      finishPointer(pointer, point);
     };
 
     const cancelPointer = (event: PointerEvent) => {
@@ -268,6 +288,7 @@ export function LivePointerInput() {
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("pointercancel", cancelPointer, true);
+    window.addEventListener("mouseup", onMouseUp, true);
     window.addEventListener("blur", onBlur);
 
     return () => {
@@ -279,6 +300,7 @@ export function LivePointerInput() {
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("pointercancel", cancelPointer, true);
+      window.removeEventListener("mouseup", onMouseUp, true);
       window.removeEventListener("blur", onBlur);
       client.close();
     };
