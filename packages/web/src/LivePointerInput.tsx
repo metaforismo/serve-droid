@@ -268,7 +268,6 @@ export function LivePointerInput() {
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("pointercancel", cancelPointer, true);
-    document.addEventListener("lostpointercapture", cancelPointer, true);
     window.addEventListener("blur", onBlur);
 
     return () => {
@@ -280,7 +279,6 @@ export function LivePointerInput() {
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("pointercancel", cancelPointer, true);
-      document.removeEventListener("lostpointercapture", cancelPointer, true);
       window.removeEventListener("blur", onBlur);
       client.close();
     };
