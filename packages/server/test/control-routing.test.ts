@@ -159,6 +159,32 @@ describe("pointer transport routing", () => {
     expect(usedAdbInput(adb.calls)).toBe(false);
   });
 
+  it("passes aligned two-finger paths unchanged to the active scrcpy control", async () => {
+    const adb = new FakeAdb();
+    const control = new FakePointerControl();
+    const server = new ServeDroidServer(new AndroidService(adb, device), {
+      token: "test-token",
+      videoSource: new FakeVideo(control),
+    });
+    servers.push(server);
+    const gesture: Gesture = {
+      points: [
+        { x: 0.4, y: 0.5 },
+        { x: 0.2, y: 0.5, durationMs: 240 },
+      ],
+      secondaryPoints: [
+        { x: 0.6, y: 0.5 },
+        { x: 0.8, y: 0.5 },
+      ],
+    };
+
+    const response = await postAction(server, { type: "gesture", gesture });
+
+    expect(response.status).toBe(200);
+    expect(control.gestures).toEqual([gesture]);
+    expect(usedAdbInput(adb.calls)).toBe(false);
+  });
+
   it("uses the existing bounded ADB action path when scrcpy control is unavailable", async () => {
     const adb = new FakeAdb();
     const server = new ServeDroidServer(new AndroidService(adb, device), {
@@ -169,6 +195,38 @@ describe("pointer transport routing", () => {
 
     expect((await postAction(server, { type: "tap", x: 0.5, y: 0.25 })).status).toBe(200);
     expect(adb.calls).toContainEqual(["shell", "input", "tap", "540", "480"]);
+  });
+
+  it("does not approximate two-finger input through sequential ADB swipes", async () => {
+    const adb = new FakeAdb();
+    const server = new ServeDroidServer(new AndroidService(adb, device), {
+      token: "test-token",
+      videoSource: new FakeVideo(),
+    });
+    servers.push(server);
+
+    const response = await postAction(server, {
+      type: "gesture",
+      gesture: {
+        points: [
+          { x: 0.4, y: 0.5 },
+          { x: 0.2, y: 0.5, durationMs: 240 },
+        ],
+        secondaryPoints: [
+          { x: 0.6, y: 0.5 },
+          { x: 0.8, y: 0.5 },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: {
+        code: "TRANSPORT_FAILED",
+        message: "Two-finger gestures require an active scrcpy control channel.",
+      },
+    });
+    expect(usedAdbInput(adb.calls)).toBe(false);
   });
 
   it("rejects an oversized fallback gesture before issuing any ADB input", async () => {
