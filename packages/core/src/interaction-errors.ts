@@ -200,7 +200,10 @@ export async function readKeyguardDiagnostics(
         diagnostics,
         parseKeyguardDiagnostics(`${result.stdout}\n${result.stderr}`),
       );
-      if (diagnostics.locked !== null && diagnostics.evidence.length > 0) break;
+      const conclusive =
+        diagnostics.locked === false ||
+        (diagnostics.locked === true && diagnostics.secure !== null);
+      if (conclusive && diagnostics.evidence.length > 0) break;
     } catch {
       // Diagnostics are best-effort and must never replace the original interaction failure.
     }
@@ -209,7 +212,13 @@ export async function readKeyguardDiagnostics(
 }
 
 function boundedMessage(value: string): string {
-  const normalized = value.trim().replaceAll("\u0000", "");
+  const normalized = value
+    // eslint-disable-next-line no-control-regex -- Intentionally strips ANSI CSI from untrusted Android output.
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    // eslint-disable-next-line no-control-regex -- Intentionally replaces remaining C0 and DEL controls.
+    .replace(/[\u0000-\u001f\u007f]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
   if (!normalized) return "Android interaction failed.";
   return normalized.slice(0, MAX_ANDROID_MESSAGE);
 }

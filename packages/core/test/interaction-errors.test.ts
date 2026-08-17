@@ -161,6 +161,45 @@ describe("interaction command errors", () => {
     ]);
   });
 
+  it("continues diagnostics when the first dump proves a lock but not whether it is secure", async () => {
+    const adb = new ScriptedAdb([
+      { stdout: "", stderr: "input command failed", exitCode: 1 },
+      {
+        stdout: `KeyguardController:
+  mKeyguardShowing=true
+  mKeyguardGoingAway=false
+  mAodShowing=false
+`,
+        stderr: "",
+        exitCode: 0,
+      },
+      {
+        stdout: `KeyguardStateMonitor
+  mIsShowing=true
+  mSimSecure=true
+  mInputRestricted=true
+`,
+        stderr: "",
+        exitCode: 0,
+      },
+    ]);
+
+    await expect(
+      runInteractionCommand(adb, ["shell", "input", "tap", "10", "20"], {
+        serial: "device-1",
+        operation: "tap",
+      }),
+    ).rejects.toMatchObject({
+      code: "SECURE_SCREEN",
+      details: { keyguard: { locked: true, secure: true } },
+    });
+    expect(adb.calls.map((call) => call.args)).toEqual([
+      ["shell", "input", "tap", "10", "20"],
+      ["shell", "dumpsys", "window", "policy"],
+      ["shell", "dumpsys", "activity", "activities"],
+    ]);
+  });
+
   it("returns DEVICE_LOCKED for a non-secure visible keyguard", async () => {
     const adb = new ScriptedAdb([
       { stdout: "", stderr: "input command failed", exitCode: 1 },
@@ -225,6 +264,23 @@ describe("interaction command errors", () => {
       details: { operation: "type", serial: "device-1" },
     });
     expect(JSON.stringify(await failure)).not.toContain("private%smessage");
+  });
+
+  it("removes terminal control sequences from the bounded Android message", async () => {
+    const adb = new ScriptedAdb([
+      { stdout: "", stderr: "\u001b[31minput failed\u001b[0m\nsecond line", exitCode: 1 },
+      { stdout: unlockedKeyguardDump, stderr: "", exitCode: 0 },
+    ]);
+
+    await expect(
+      runInteractionCommand(adb, ["shell", "input", "tap", "10", "20"], {
+        serial: "device-1",
+        operation: "tap",
+      }),
+    ).rejects.toMatchObject({
+      code: "ADB_FAILED",
+      message: "input failed second line",
+    });
   });
 
   it("preserves the original failure when diagnostic commands throw", async () => {
