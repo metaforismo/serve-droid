@@ -79,6 +79,39 @@ describe("PointerStreamClient", () => {
     client.close();
   });
 
+  it("drains a newest move that arrives while the previous move loop is releasing", async () => {
+    const socket = new FakeSocket();
+    const client = new PointerStreamClient({
+      createSocket: () => socket as unknown as WebSocket,
+    });
+    client.start();
+    socket.open();
+
+    const began = client.begin({ x: 0.1, y: 0.1 });
+    await settle();
+    socket.respond({ schemaVersion: 1, ok: true });
+    await began;
+
+    client.move({ x: 0.2, y: 0.2 });
+    await settle();
+    expect(phase(socket.sent[1]!)).toBe("move");
+
+    socket.respond({ schemaVersion: 1, ok: true });
+    queueMicrotask(() => client.move({ x: 0.8, y: 0.9 }));
+    await settle();
+
+    expect(phase(socket.sent[2]!)).toBe("move");
+    expect(point(socket.sent[2]!)).toEqual({ x: 0.8, y: 0.9 });
+    socket.respond({ schemaVersion: 1, ok: true });
+
+    const ended = client.end({ x: 0.8, y: 0.9 });
+    await settle();
+    expect(phase(socket.sent[3]!)).toBe("end");
+    socket.respond({ schemaVersion: 1, ok: true });
+    await ended;
+    client.close();
+  });
+
   it("returns the bounded action fallback only for an explicit pre-injection rejection", async () => {
     const socket = new FakeSocket();
     const client = new PointerStreamClient({
