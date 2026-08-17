@@ -19,11 +19,7 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
     window.__livePointerControlOpen = false;
 
     class MockWebSocket {
-      public static readonly CONNECTING = 0;
-      public static readonly OPEN = 1;
-      public static readonly CLOSING = 2;
-      public static readonly CLOSED = 3;
-      public readyState = MockWebSocket.CONNECTING;
+      public readyState = WebSocket.CONNECTING;
       public binaryType: BinaryType = "blob";
       public onopen: ((event: Event) => unknown) | null = null;
       public onmessage: ((event: MessageEvent) => unknown) | null = null;
@@ -31,10 +27,11 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
       public onclose: ((event: CloseEvent) => unknown) | null = null;
       readonly #url: string;
 
-      public constructor(url: string | URL) {
-        this.#url = String(url);
+      public constructor(url: string) {
+        this.#url = url;
         queueMicrotask(() => {
-          this.readyState = MockWebSocket.OPEN;
+          if (this.readyState === WebSocket.CLOSED) return;
+          this.readyState = WebSocket.OPEN;
           if (this.#url.endsWith("/api/v1/control")) {
             window.__livePointerControlOpen = true;
           }
@@ -55,17 +52,14 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
       }
 
       public close(code = 1000, reason = ""): void {
-        if (this.readyState === MockWebSocket.CLOSED) return;
-        this.readyState = MockWebSocket.CLOSED;
+        if (this.readyState === WebSocket.CLOSED) return;
+        this.readyState = WebSocket.CLOSED;
         this.onclose?.(new CloseEvent("close", { code, reason }));
       }
     }
 
-    Object.defineProperty(globalThis, "WebSocket", {
-      configurable: true,
-      writable: true,
-      value: MockWebSocket,
-    });
+    window.__SERVE_DROID_WEBSOCKET_FACTORY__ = (url) =>
+      new MockWebSocket(url) as unknown as WebSocket;
   });
 
   await page.route("**/api/v1/actions", async (route) => {
