@@ -1,14 +1,14 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { ServeDroidError } from "@serve-droid/core";
-import { afterEach, describe, expect, it } from "vitest";
 import {
   AndroidService,
+  ServeDroidError,
   type AdbRunner,
   type DeviceSummary,
   type Gesture,
   type RunResult,
-} from "../../core/src/index.js";
+} from "@serve-droid/core";
+import { afterEach, describe, expect, it } from "vitest";
 import type { DevicePointerControl } from "../src/control.js";
 import { ServeDroidServer } from "../src/server.js";
 import type { VideoSource, VideoSourceEvents } from "../src/video.js";
