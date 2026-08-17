@@ -1,0 +1,66 @@
+name: Generate fixture wrapper
+
+on:
+  push:
+    branches:
+      - ci/android-fixture-wrapper
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: ${{ !contains(github.event.head_commit.message, '[fixture-wrapper-generated]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ci/android-fixture-wrapper
+          fetch-depth: 0
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Download and verify Gradle 8.11.1
+        shell: bash
+        run: |
+          curl --fail --show-error --silent --location \
+            --output "$RUNNER_TEMP/gradle-8.11.1-bin.zip" \
+            https://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+          echo 'f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6  '"$RUNNER_TEMP/gradle-8.11.1-bin.zip" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/gradle-8.11.1-bin.zip" -d "$RUNNER_TEMP"
+      - name: Generate pinned wrapper
+        working-directory: fixtures/android-test-app
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/gradle-8.11.1/bin/gradle" wrapper \
+            --gradle-version 8.11.1 \
+            --distribution-type bin \
+            --gradle-distribution-sha256-sum f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6 \
+            --no-daemon
+          chmod +x gradlew
+          grep -F 'distributionSha256Sum=f397b287023acdba1e9f6fc5ea72d22dd63669d59ed4a289a29b1a76eee151c6' gradle/wrapper/gradle-wrapper.properties
+          echo '2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046  gradle/wrapper/gradle-wrapper.jar' | sha256sum --check
+      - name: Build fixture through generated wrapper
+        working-directory: fixtures/android-test-app
+        shell: bash
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify APK artifact
+        shell: bash
+        run: |
+          test -s fixtures/android-test-app/app/build/outputs/apk/debug/app-debug.apk
+          sha256sum fixtures/android-test-app/app/build/outputs/apk/debug/app-debug.apk
+      - name: Commit wrapper only
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add \
+            fixtures/android-test-app/gradlew \
+            fixtures/android-test-app/gradlew.bat \
+            fixtures/android-test-app/gradle/wrapper/gradle-wrapper.jar \
+            fixtures/android-test-app/gradle/wrapper/gradle-wrapper.properties
+          git diff --cached --check
+          git commit -m 'Add verified fixture Gradle wrapper [fixture-wrapper-generated]'
+          git push origin HEAD:ci/android-fixture-wrapper
