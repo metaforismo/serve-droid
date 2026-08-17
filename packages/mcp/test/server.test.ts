@@ -152,6 +152,14 @@ function fixture(): Fixture {
       startSession: async () => ({
         info: session,
         service: current,
+        captureScreenshot: async () => ({
+          data: Buffer.from([4, 5, 6]),
+          mimeType: "image/jpeg",
+          source: "stream",
+          width: 3,
+          height: 2,
+          capturedAt: "2026-07-17T00:00:01.000Z",
+        }),
         stop: async () => {
           stopped.value = true;
         },
@@ -211,7 +219,11 @@ describe("MCP contracts", () => {
     const started = await call("android_start_session", { device: device.serial });
     expect(JSON.stringify(started)).not.toContain(session.token);
     const observed = await call("android_observe", { logsSince: "4" });
-    expect(observed.content[0]).toMatchObject({ type: "image", data: "AQID" });
+    expect(observed.content[0]).toMatchObject({ type: "image", data: "BAUG" });
+    expect(observed.content[1]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining('"source":"stream"'),
+    });
     await call("android_tap", { x: 0.1, y: 0.2 });
     await call("android_tap_element", { selector: { resourceId: element.resourceId } });
     await call("android_swipe", { x1: 0.1, y1: 0.2, x2: 0.8, y2: 0.9, durationMs: 350 });
@@ -235,6 +247,23 @@ describe("MCP contracts", () => {
     expect(state.serviceStops.value).toBe(0);
     expect(state.logCalls).toEqual([{ since: "7", packageName: "dev.servedroid.fixture" }]);
     expect(state.stopped.value).toBe(true);
+  });
+
+  it("uses the ADB screenshot path when no browser session is active", async () => {
+    const state = fixture();
+    const client = await connectedClient(state.runtime);
+    const observed = await client.callTool({
+      name: "android_observe",
+      arguments: { logsSince: "0" },
+    });
+    expect(observed.isError).not.toBe(true);
+    expect(observed.content[0]).toMatchObject({ type: "image", data: "AQID" });
+    expect(observed.content[1]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining('"source":"device"'),
+    });
+    expect(state.serviceCalls.value).toBe(1);
+    expect(state.serviceStops.value).toBe(1);
   });
 
   it("returns ELEMENT_NOT_FOUND and never taps after a failed semantic lookup", async () => {

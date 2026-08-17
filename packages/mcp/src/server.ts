@@ -13,7 +13,11 @@ import {
   type SessionInfo,
   type UiElement,
 } from "@serve-droid/core";
-import { ServeDroidServer } from "@serve-droid/server";
+import {
+  ServeDroidServer,
+  type AgentScreenshot,
+  type AgentScreenshotOptions,
+} from "@serve-droid/server";
 import { z } from "zod";
 
 const Device = z.object({
@@ -66,6 +70,7 @@ export interface McpAndroidService {
 export interface McpActiveSession {
   info: SessionInfo;
   service: McpAndroidService;
+  captureScreenshot(options: AgentScreenshotOptions): Promise<AgentScreenshot>;
   stop(): Promise<void>;
 }
 
@@ -113,6 +118,7 @@ function defaultRuntime(): McpRuntime {
       return {
         info: await server.start(),
         service: current,
+        captureScreenshot: (options) => server.captureAgentScreenshot(options),
         stop: () => server.stop(),
       };
     },
@@ -123,13 +129,30 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
   const mcp = new McpServer({ name: "serve-droid", version: "0.1.0" });
   let activeSession: McpActiveSession | undefined;
   const selectedService = async (device?: string) => {
+    const session = activeSession;
     if (
-      activeSession &&
-      (!device || device.toLowerCase() === activeSession.info.device.serial.toLowerCase())
+      session &&
+      (!device || device.toLowerCase() === session.info.device.serial.toLowerCase())
     ) {
-      return { current: activeSession.service, temporary: false };
+      return {
+        current: session.service,
+        temporary: false,
+        captureScreenshot: (options: AgentScreenshotOptions) => session.captureScreenshot(options),
+      };
     }
-    return { current: await runtime.service(device), temporary: true };
+    const current = await runtime.service(device);
+    return {
+      current,
+      temporary: true,
+      captureScreenshot: async (options: AgentScreenshotOptions): Promise<AgentScreenshot> => ({
+        data: await current.screenshot(options),
+        mimeType: "image/jpeg",
+        source: "device",
+        width: null,
+        height: null,
+        capturedAt: new Date().toISOString(),
+      }),
+    };
   };
 
   mcp.registerTool(
@@ -175,17 +198,32 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
       inputSchema: Device.extend({ logsSince: z.string().default("0") }),
     },
     async ({ device, logsSince }) => {
-      const { current, temporary } = await selectedService(device);
+      const { current, temporary, captureScreenshot } = await selectedService(device);
       current.startLogs();
       try {
         const [observation, screenshot] = await Promise.all([
           current.observe(logsSince),
-          current.screenshot({ width: 1080, quality: 75 }),
+          captureScreenshot({ width: 1080, quality: 75 }),
         ]);
         return {
           content: [
-            { type: "image" as const, data: screenshot.toString("base64"), mimeType: "image/jpeg" },
-            { type: "text" as const, text: JSON.stringify(observation) },
+            {
+              type: "image" as const,
+              data: screenshot.data.toString("base64"),
+              mimeType: screenshot.mimeType,
+            },
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                ...observation,
+                screenshot: {
+                  source: screenshot.source,
+                  width: screenshot.width,
+                  height: screenshot.height,
+                  capturedAt: screenshot.capturedAt,
+                },
+              }),
+            },
           ],
         };
       } finally {

@@ -34,6 +34,7 @@ import {
   type UploadProgress,
 } from "./api.js";
 import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
+import { handleDecodedFrameRequest } from "./decoded-frame.js";
 import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
 
 type Panel = "logs" | "tree";
@@ -228,7 +229,17 @@ function Cockpit() {
         socket = authenticatedWebSocket("/api/v1/video");
         socket.binaryType = "arraybuffer";
         socket.onopen = () => setStatus(`Streaming · ${backend}`);
-        socket.onmessage = (event) => player?.push(event.data as ArrayBuffer);
+        socket.onmessage = (event) => {
+          if (typeof event.data === "string") {
+            void handleDecodedFrameRequest(event.data, (message) => {
+              if (socket?.readyState === WebSocket.OPEN) socket.send(message);
+            }).catch((reason: unknown) =>
+              setError(reason instanceof Error ? reason.message : String(reason)),
+            );
+            return;
+          }
+          player?.push(event.data as ArrayBuffer);
+        };
         socket.onclose = (event) =>
           event.code !== 1000 && setError(event.reason || "Video stream closed.");
       })
