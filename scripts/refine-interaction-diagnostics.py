@@ -20,7 +20,9 @@ old_message = '''function boundedMessage(value: string): string {
 }'''
 new_message = '''function boundedMessage(value: string): string {
   const normalized = value
+    // eslint-disable-next-line no-control-regex -- Intentionally strips ANSI CSI from untrusted Android output.
     .replace(/\\u001b\\[[0-?]*[ -/]*[@-~]/gu, "")
+    // eslint-disable-next-line no-control-regex -- Intentionally replaces remaining C0 and DEL controls.
     .replace(/[\\u0000-\\u001f\\u007f]/gu, " ")
     .replace(/\\s+/gu, " ")
     .trim();
