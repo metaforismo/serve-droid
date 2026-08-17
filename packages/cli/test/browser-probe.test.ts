@@ -133,9 +133,7 @@ describe("one-time browser probe", () => {
   });
 
   it("closes a probe that never returns a result", async () => {
-    await expect(
-      probeBrowser({ timeoutMs: 25, launch: () => undefined }),
-    ).rejects.toMatchObject({
+    await expect(probeBrowser({ timeoutMs: 25, launch: () => undefined })).rejects.toMatchObject({
       code: "TRANSPORT_FAILED",
       details: { timeoutMs: 25 },
     });

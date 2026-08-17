@@ -84,9 +84,7 @@ export function parseBrowserCapabilities(value: unknown): BrowserCapabilities {
   };
 }
 
-export function classifyBrowserCapabilities(
-  capabilities: BrowserCapabilities,
-): BrowserProbeResult {
+export function classifyBrowserCapabilities(capabilities: BrowserCapabilities): BrowserProbeResult {
   const control = capabilities.fetch && capabilities.webSocket;
   const decoder: BrowserDecoder =
     capabilities.webCodecs && capabilities.canvas2d
@@ -108,7 +106,9 @@ export function classifyBrowserCapabilities(
     warnings.push("The page is not a secure context; clipboard APIs may be restricted.");
   }
   if (!capabilities.clipboardRead) {
-    warnings.push("Clipboard API loading is unavailable; manual clipboard entry remains available.");
+    warnings.push(
+      "Clipboard API loading is unavailable; manual clipboard entry remains available.",
+    );
   }
   if (!capabilities.fileApi) {
     warnings.push("Browser file APIs are unavailable; drag-and-drop upload is not supported.");
@@ -310,9 +310,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export async function probeBrowser(
-  options: BrowserProbeOptions = {},
-): Promise<BrowserProbeResult> {
+export async function probeBrowser(options: BrowserProbeOptions = {}): Promise<BrowserProbeResult> {
   const timeoutMs = boundedTimeout(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const token = randomBytes(24).toString("hex");
   const nonce = randomBytes(18).toString("base64url");
@@ -367,9 +365,9 @@ export async function probeBrowser(
           throw new ProbeHttpError(403, "Capability report origin is invalid.");
         }
         const capabilities = parseBrowserCapabilities(await readReport(request));
+        response.once("finish", () => resolveResult(classifyBrowserCapabilities(capabilities)));
         response.writeHead(204, commonHeaders());
         response.end();
-        response.once("finish", () => resolveResult(classifyBrowserCapabilities(capabilities)));
         return;
       }
       textResponse(response, 404, "Not found.");

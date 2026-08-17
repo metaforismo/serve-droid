@@ -30,6 +30,7 @@ import {
   resolveCloudflaredPath,
 } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
+import { probeBrowser } from "./browser-probe.js";
 
 interface GlobalOptions {
   device?: string;
@@ -74,12 +75,24 @@ const program = addGlobal(new Command())
 
 program
   .command("doctor")
-  .description("Check Node, ADB, devices, authorization, and Android API support.")
+  .description("Check Node, ADB, devices, Android support, and optional browser capabilities.")
   .option("--host <host>", "host used by the fixed-port probe", "127.0.0.1")
   .option("--port <port>", "fixed listen port to probe", (value) => Number.parseInt(value, 10), 0)
+  .option("--browser", "open a one-time loopback browser capability probe")
+  .option(
+    "--browser-timeout <seconds>",
+    "maximum time to wait for the browser capability report",
+    (value) => Number.parseInt(value, 10),
+    20,
+  )
   .action(async (local, command) => {
     const options = globalOptions(command);
-    const checks: Array<{ name: string; ok: boolean; message: string }> = [];
+    const checks: Array<{
+      name: string;
+      ok: boolean;
+      message: string;
+      details?: unknown;
+    }> = [];
     checks.push({
       name: "node",
       ok: Number(process.versions.node.split(".")[0]) >= 22,
@@ -101,6 +114,32 @@ program
           ok: false,
           message: error instanceof Error ? error.message : "Port probe failed.",
         });
+      }
+    }
+    if (local.browser) {
+      const timeoutSeconds = Number(local.browserTimeout);
+      if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 1 || timeoutSeconds > 120) {
+        checks.push({
+          name: "browser",
+          ok: false,
+          message: "Browser probe timeout must be an integer between 1 and 120 seconds.",
+        });
+      } else {
+        try {
+          const browser = await probeBrowser({ timeoutMs: timeoutSeconds * 1_000 });
+          checks.push({
+            name: "browser",
+            ok: browser.ready,
+            message: `${browser.ready ? "ready" : "not ready"}; decoder ${browser.decoder}; control ${browser.control ? "available" : "unavailable"}; ${browser.capabilities.userAgent}`,
+            details: browser,
+          });
+        } catch (error) {
+          checks.push({
+            name: "browser",
+            ok: false,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
     try {
