@@ -9,10 +9,16 @@ declare global {
 
 async function openCockpit(page: Page, actions: Array<Record<string, unknown>>): Promise<void> {
   await page.addInitScript(() => {
+    const bootstrap = { token: "browser-test-token" };
+    Object.defineProperty(globalThis, "__SERVE_DROID_BOOTSTRAP__", {
+      configurable: true,
+      writable: true,
+      value: bootstrap,
+    });
     Object.defineProperty(globalThis, "__SERVE_DROID__", {
       configurable: true,
       writable: true,
-      value: { token: "browser-test-token" },
+      value: bootstrap,
     });
     window.__livePointerMessages = [];
     window.__livePointerControlOpen = false;
