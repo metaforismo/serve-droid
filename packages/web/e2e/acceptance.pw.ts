@@ -129,7 +129,11 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
   let fileName = "";
   let contentType = "";
   await page.addInitScript(() => {
-    const originalSend = XMLHttpRequest.prototype.send;
+    const descriptor = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, "send");
+    if (typeof descriptor?.value !== "function") return;
+    const originalSend = descriptor.value as (
+      body?: Document | XMLHttpRequestBodyInit | null,
+    ) => void;
     XMLHttpRequest.prototype.send = function (
       body?: Document | XMLHttpRequestBodyInit | null,
     ): void {
@@ -140,7 +144,7 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
           ).__serveDroidAcceptanceUpload = Array.from(new Uint8Array(buffer));
         });
       }
-      originalSend.call(this, body ?? null);
+      Reflect.apply(originalSend, this, [body ?? null]);
     };
   });
   await routeCockpitHttp(page);
