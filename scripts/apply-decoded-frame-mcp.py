@@ -50,14 +50,25 @@ replace_once(
 )
 replace_once(
     "packages/mcp/src/server.ts",
-    '''      return { current: activeSession.service, temporary: false };
+    '''  const selectedService = async (device?: string) => {
+    if (
+      activeSession &&
+      (!device || device.toLowerCase() === activeSession.info.device.serial.toLowerCase())
+    ) {
+      return { current: activeSession.service, temporary: false };
     }
-    return { current: await runtime.service(device), temporary: true };''',
-    '''      return {
-        current: activeSession.service,
+    return { current: await runtime.service(device), temporary: true };
+  };''',
+    '''  const selectedService = async (device?: string) => {
+    const session = activeSession;
+    if (
+      session &&
+      (!device || device.toLowerCase() === session.info.device.serial.toLowerCase())
+    ) {
+      return {
+        current: session.service,
         temporary: false,
-        captureScreenshot: (options: AgentScreenshotOptions) =>
-          activeSession.captureScreenshot(options),
+        captureScreenshot: (options: AgentScreenshotOptions) => session.captureScreenshot(options),
       };
     }
     const current = await runtime.service(device);
@@ -72,7 +83,8 @@ replace_once(
         height: null,
         capturedAt: new Date().toISOString(),
       }),
-    };''',
+    };
+  };''',
     "selected screenshot source",
 )
 replace_once(
