@@ -49,7 +49,10 @@ async function routeCockpitHttp(
   );
 }
 
-async function routeVideo(page: Page, onConnect: (protocols: string[], url: string) => void = () => undefined) {
+async function routeVideo(
+  page: Page,
+  onConnect: (protocols: string[], url: string) => void = () => undefined,
+): Promise<void> {
   await page.routeWebSocket("**/api/v1/video", (socket) => {
     onConnect([...socket.protocols()], socket.url());
     socket.onMessage(() => undefined);
@@ -110,7 +113,10 @@ test("visible cockpit controls have accessible names and keyboard focus", async 
   }
 
   await expect(page.getByRole("tablist")).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Logcat/u })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("tab", { name: /Logcat/u })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
   expect(await page.locator('[aria-live="polite"]').count()).toBeGreaterThan(0);
 
   await page.keyboard.press("Tab");
@@ -154,9 +160,9 @@ test("file upload preserves bearer auth, raw bytes, and the visible completion s
     buffer: payload,
   });
 
-  await expect(page.getByRole("status").filter({ hasText: "Pushed notes.txt to Downloads" })).toContainText(
-    "Done",
-  );
+  await expect(
+    page.getByRole("status").filter({ hasText: "Pushed notes.txt to Downloads" }),
+  ).toContainText("Done");
   expect(authorization).toBe(`Bearer ${token}`);
   expect(fileName).toBe("notes.txt");
   expect(contentType).toBe("application/octet-stream");
