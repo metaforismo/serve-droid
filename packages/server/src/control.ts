@@ -6,6 +6,8 @@ import {
 } from "@yume-chan/scrcpy";
 import {
   ServeDroidError,
+  boundedInteractionMessage,
+  inputRestrictionError,
   validateGesture,
   validateGestureStream,
   type Gesture,
@@ -73,7 +75,10 @@ function assertDuration(value: number, name = "durationMs"): void {
 }
 
 function errorCause(error: unknown): string {
-  return (error instanceof Error ? error.message : String(error)).slice(0, 160);
+  return boundedInteractionMessage(error instanceof Error ? error.message : String(error)).slice(
+    0,
+    160,
+  );
 }
 
 export class ScrcpyPointerController implements DevicePointerControl {
@@ -487,8 +492,14 @@ export class ScrcpyPointerController implements DevicePointerControl {
   }
 
   #transportError(error: unknown, phase?: string): ServeDroidError {
+    const cause = errorCause(error);
+    const restricted = inputRestrictionError(cause, {
+      transport: "scrcpy",
+      ...(phase ? { phase } : {}),
+    });
+    if (restricted) return restricted;
     return new ServeDroidError("TRANSPORT_FAILED", "scrcpy pointer injection failed.", {
-      cause: errorCause(error),
+      cause,
       ...(phase ? { phase } : {}),
     });
   }

@@ -10,6 +10,9 @@ export type ErrorCode =
   | "DEVICE_AMBIGUOUS"
   | "DEVICE_UNAUTHORIZED"
   | "DEVICE_OFFLINE"
+  | "DEVICE_LOCKED"
+  | "SECURE_SCREEN"
+  | "INPUT_RESTRICTED"
   | "UNSUPPORTED_ANDROID"
   | "INVALID_ARGUMENT"
   | "ELEMENT_NOT_FOUND"
@@ -50,7 +53,13 @@ export function errorExitCode(error: unknown): number {
   if (!(error instanceof ServeDroidError)) return 1;
   if (error.code === "ADB_NOT_FOUND" || error.code === "CLOUDFLARED_NOT_FOUND") return 10;
   if (error.code.startsWith("EMULATOR_") || error.code.startsWith("AVD_")) return 11;
-  if (error.code.startsWith("DEVICE_") || error.code === "UNSUPPORTED_ANDROID") return 20;
+  if (
+    error.code.startsWith("DEVICE_") ||
+    error.code === "SECURE_SCREEN" ||
+    error.code === "INPUT_RESTRICTED" ||
+    error.code === "UNSUPPORTED_ANDROID"
+  )
+    return 20;
   if (error.code === "INVALID_ARGUMENT") return 30;
   if (error.code === "PORT_IN_USE") return 31;
   if (error.code === "AUTHENTICATION_REQUIRED") return 40;

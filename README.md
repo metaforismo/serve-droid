@@ -62,6 +62,7 @@ Android Platform Tools are never downloaded silently or redistributed.
 
 ```bash
 npx serve-droid doctor
+npx serve-droid doctor --browser
 npx serve-droid avd list
 npx serve-droid start --detach
 npx serve-droid list --json
@@ -109,6 +110,10 @@ npx serve-droid tap 0.5 0.5
 npx serve-droid swipe 0.5 0.8 0.5 0.2 --duration 350
 npx serve-droid app deep-link 'servedroid://fixture/example'
 ```
+
+Failed ADB interactions preserve generic errors unless Android reports explicit keyguard or
+input-policy evidence. See the [interaction failure diagnostics](docs/interaction-errors.md)
+for the `DEVICE_LOCKED`, `SECURE_SCREEN`, and `INPUT_RESTRICTED` contract.
 
 Direct browser pointers now stream an authenticated `begin → move* → end` lifecycle over the
 control WebSocket while the cursor or finger is still moving. The browser keeps one request and one

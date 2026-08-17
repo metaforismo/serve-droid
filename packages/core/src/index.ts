@@ -3,6 +3,7 @@ export * from "./adb.js";
 export * from "./avd.js";
 export * from "./devices.js";
 export * from "./errors.js";
+export * from "./interaction-errors.js";
 export * from "./logs.js";
 export * from "./service.js";
 export * from "./types.js";

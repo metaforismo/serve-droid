@@ -80,7 +80,7 @@ because its code path compiles.
 - [x] Detect hierarchy staleness after rotation and foreground-app changes.
 - [ ] Capture agent screenshots from the decoded stream before using ADB fallback.
 - [x] Reset package PID filtering automatically after every app relaunch.
-- [ ] Add typed errors for locked/secure screens and OEM input restrictions.
+- [x] Add typed errors for locked/secure screens and OEM input restrictions.
 
 ## Browser cockpit
 
