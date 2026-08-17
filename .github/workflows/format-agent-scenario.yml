@@ -1,0 +1,42 @@
+name: Format Android agent scenario
+
+on:
+  push:
+    branches:
+      - test/android-agent-scenario
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[agent-scenario-formatted]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PNPM_VERSION: 10.28.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: test/android-agent-scenario
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Format scenario files
+        run: pnpm exec prettier --write packages/core/test/device.test.ts .github/workflows/ci.yml
+      - name: Remove temporary formatter and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/format-agent-scenario.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/core/test/device.test.ts .github/workflows/ci.yml
+          git diff --cached --check
+          git commit -m 'Format Android agent scenario [agent-scenario-formatted]'
+          git push origin HEAD:test/android-agent-scenario
