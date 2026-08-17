@@ -9,6 +9,7 @@ import { AdbScrcpyClient, AdbScrcpyOptionsLatest } from "@yume-chan/adb-scrcpy";
 import { AndroidAvcLevel, AndroidAvcProfile, ScrcpyCodecOptions } from "@yume-chan/scrcpy";
 import { ServeDroidError } from "@serve-droid/core";
 import type { Adb } from "@yume-chan/adb";
+import { ScrcpyPointerController, type DevicePointerControl } from "./control.js";
 
 export interface VideoSourceEvents {
   data: [Buffer];
@@ -28,6 +29,7 @@ export interface AudioState {
 }
 
 export interface VideoSource extends EventEmitter<VideoSourceEvents> {
+  readonly control?: DevicePointerControl;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -44,6 +46,10 @@ export class RestartingVideoSource extends EventEmitter<VideoSourceEvents> imple
 
   public constructor(private readonly createSource: () => VideoSource) {
     super();
+  }
+
+  public get control(): DevicePointerControl | undefined {
+    return this.#source?.control;
   }
 
   public async start(): Promise<void> {
@@ -189,6 +195,8 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
   #adb: Adb | undefined;
   #client: TangoClient | undefined;
   #reader: { cancel(): Promise<void>; releaseLock(): void } | undefined;
+  #control: ScrcpyPointerController | undefined;
+  #size: { width: number; height: number } | undefined;
   #stopped = false;
 
   public constructor(
@@ -196,6 +204,10 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
     private readonly captureAudio = false,
   ) {
     super();
+  }
+
+  public get control(): DevicePointerControl | undefined {
+    return this.#control;
   }
 
   public async start(): Promise<void> {
@@ -230,8 +242,15 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
     this.#client = client;
     void this.#consumeOutput(client.output);
     const video = await client.videoStream;
-    this.emit("size", { width: video.width, height: video.height });
-    video.sizeChanged((size) => this.emit("size", size));
+    this.#size = { width: video.width, height: video.height };
+    this.#control = client.controller
+      ? new ScrcpyPointerController(client.controller, () => this.#size)
+      : undefined;
+    this.emit("size", this.#size);
+    video.sizeChanged((size) => {
+      this.#size = { ...size };
+      this.emit("size", size);
+    });
     void this.#consumeVideo(video);
     if (this.captureAudio) {
       void this.#startAudio(client);
@@ -250,6 +269,8 @@ export class ScrcpyH264Source extends EventEmitter<VideoSourceEvents> implements
   public async stop(): Promise<void> {
     if (this.#stopped) return;
     this.#stopped = true;
+    this.#control = undefined;
+    this.#size = undefined;
     await this.#reader?.cancel().catch(() => undefined);
     await this.#client?.close().catch(() => undefined);
     await this.#adb?.close().catch(() => undefined);
