@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PointerStreamClient, PointerStreamError } from "../src/pointer-stream.js";
+import { PointerStreamClient } from "../src/pointer-stream.js";
+import type { PointerStreamError } from "../src/pointer-stream.js";
 
 class FakeSocket {
   public readyState = 0;
