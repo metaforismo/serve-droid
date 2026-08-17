@@ -4,11 +4,9 @@ import {
   ScrcpyPointerId,
   type ScrcpyControlMessageWriter,
 } from "@yume-chan/scrcpy";
-import { ServeDroidError, type Gesture } from "@serve-droid/core";
+import { ServeDroidError, validateGesture, type Gesture } from "@serve-droid/core";
 
 const MAX_MOVE_MESSAGES = 120;
-const MAX_GESTURE_POINTS = 64;
-const MAX_GESTURE_DURATION_MS = 60_000;
 const MAX_PENDING_ACTIONS = 8;
 const TARGET_MOVE_INTERVAL_MS = 16;
 
@@ -57,45 +55,6 @@ function assertDuration(value: number, name = "durationMs"): void {
   }
 }
 
-export function validatePointerGesture(gesture: Gesture): Gesture {
-  if (!gesture || !Array.isArray(gesture.points)) {
-    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture must contain a points array.");
-  }
-  if (gesture.points.length < 2) {
-    throw new ServeDroidError("INVALID_ARGUMENT", "A gesture requires at least two points.");
-  }
-  if (gesture.points.length > MAX_GESTURE_POINTS) {
-    throw new ServeDroidError(
-      "INVALID_ARGUMENT",
-      `A gesture must not exceed ${MAX_GESTURE_POINTS} points.`,
-    );
-  }
-
-  let totalDurationMs = 0;
-  const points = gesture.points.map((point, index): NormalizedPoint => {
-    if (!point || typeof point !== "object") {
-      throw new ServeDroidError("INVALID_ARGUMENT", `gesture.points[${index}] must be an object.`);
-    }
-    assertCoordinate(point.x, `gesture.points[${index}].x`);
-    assertCoordinate(point.y, `gesture.points[${index}].y`);
-    if (point.durationMs !== undefined) {
-      assertDuration(point.durationMs, `gesture.points[${index}].durationMs`);
-    }
-    if (index > 0) totalDurationMs += point.durationMs ?? 100;
-    return point.durationMs === undefined
-      ? { x: point.x, y: point.y }
-      : { x: point.x, y: point.y, durationMs: point.durationMs };
-  });
-
-  if (totalDurationMs > MAX_GESTURE_DURATION_MS) {
-    throw new ServeDroidError(
-      "INVALID_ARGUMENT",
-      `A gesture must not exceed ${MAX_GESTURE_DURATION_MS} ms in total.`,
-    );
-  }
-  return { points };
-}
-
 function errorCause(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 160);
 }
@@ -137,7 +96,7 @@ export class ScrcpyPointerController implements DevicePointerControl {
   }
 
   public async gesture(gesture: Gesture): Promise<void> {
-    const validated = validatePointerGesture(gesture);
+    const validated = validateGesture(gesture);
     await this.#enqueue(() => this.#path(validated.points));
   }
 
