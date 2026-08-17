@@ -1,0 +1,191 @@
+name: Apply browser doctor probe
+
+on:
+  push:
+    branches:
+      - feat/browser-doctor-probe
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10.28.0
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: npm install --global pnpm@${{ env.PNPM_VERSION }}
+      - run: pnpm install --frozen-lockfile
+      - name: Integrate the probe into doctor and the release checklist
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          index_path = Path("packages/cli/src/index.ts")
+          index = index_path.read_text(encoding="utf-8")
+
+          import_old = 'import { runMcpServer } from "@serve-droid/mcp";\n'
+          import_new = import_old + 'import { probeBrowser } from "./browser-probe.js";\n'
+          if import_new not in index:
+              if import_old not in index:
+                  raise SystemExit("doctor import marker was not found")
+              index = index.replace(import_old, import_new, 1)
+
+          description_old = (
+              '  .description("Check Node, ADB, devices, authorization, and Android API support.")\n'
+          )
+          description_new = (
+              '  .description("Check Node, ADB, devices, Android support, and optional browser capabilities.")\n'
+          )
+          if description_new not in index:
+              if description_old not in index:
+                  raise SystemExit("doctor description marker was not found")
+              index = index.replace(description_old, description_new, 1)
+
+          port_option = (
+              '  .option("--port <port>", "fixed listen port to probe", '
+              '(value) => Number.parseInt(value, 10), 0)\n'
+          )
+          browser_options = port_option + (
+              '  .option("--browser", "open a one-time loopback browser capability probe")\n'
+              '  .option(\n'
+              '    "--browser-timeout <seconds>",\n'
+              '    "maximum time to wait for the browser capability report",\n'
+              '    (value) => Number.parseInt(value, 10),\n'
+              '    20,\n'
+              '  )\n'
+          )
+          if browser_options not in index:
+              if port_option not in index:
+                  raise SystemExit("doctor option marker was not found")
+              index = index.replace(port_option, browser_options, 1)
+
+          checks_old = (
+              '    const checks: Array<{ name: string; ok: boolean; message: string }> = [];\n'
+          )
+          checks_new = (
+              '    const checks: Array<{\n'
+              '      name: string;\n'
+              '      ok: boolean;\n'
+              '      message: string;\n'
+              '      details?: unknown;\n'
+              '    }> = [];\n'
+          )
+          if checks_new not in index:
+              if checks_old not in index:
+                  raise SystemExit("doctor checks marker was not found")
+              index = index.replace(checks_old, checks_new, 1)
+
+          adb_marker = '    try {\n      const adbPath = await resolveAdbPath();\n'
+          browser_block = (
+              '    if (local.browser) {\n'
+              '      const timeoutSeconds = Number(local.browserTimeout);\n'
+              '      if (\n'
+              '        !Number.isInteger(timeoutSeconds) ||\n'
+              '        timeoutSeconds < 1 ||\n'
+              '        timeoutSeconds > 120\n'
+              '      ) {\n'
+              '        checks.push({\n'
+              '          name: "browser",\n'
+              '          ok: false,\n'
+              '          message: "Browser probe timeout must be an integer between 1 and 120 seconds.",\n'
+              '        });\n'
+              '      } else {\n'
+              '        try {\n'
+              '          const browser = await probeBrowser({ timeoutMs: timeoutSeconds * 1_000 });\n'
+              '          checks.push({\n'
+              '            name: "browser",\n'
+              '            ok: browser.ready,\n'
+              '            message: `${browser.ready ? "ready" : "not ready"}; decoder ${browser.decoder}; control ${browser.control ? "available" : "unavailable"}; ${browser.capabilities.userAgent}`,\n'
+              '            details: browser,\n'
+              '          });\n'
+              '        } catch (error) {\n'
+              '          checks.push({\n'
+              '            name: "browser",\n'
+              '            ok: false,\n'
+              '            message: error instanceof Error ? error.message : String(error),\n'
+              '          });\n'
+              '        }\n'
+              '      }\n'
+              '    }\n'
+          )
+          if browser_block not in index:
+              if adb_marker not in index:
+                  raise SystemExit("doctor ADB marker was not found")
+              index = index.replace(adb_marker, browser_block + adb_marker, 1)
+
+          index_path.write_text(index, encoding="utf-8")
+
+          probe_path = Path("packages/cli/src/browser-probe.ts")
+          probe = probe_path.read_text(encoding="utf-8")
+          finish_old = (
+              '        response.writeHead(204, commonHeaders());\n'
+              '        response.end();\n'
+              '        response.once("finish", () => resolveResult(classifyBrowserCapabilities(capabilities)));\n'
+          )
+          finish_new = (
+              '        response.once("finish", () =>\n'
+              '          resolveResult(classifyBrowserCapabilities(capabilities)),\n'
+              '        );\n'
+              '        response.writeHead(204, commonHeaders());\n'
+              '        response.end();\n'
+          )
+          if finish_new not in probe:
+              if finish_old not in probe:
+                  raise SystemExit("probe response marker was not found")
+              probe = probe.replace(finish_old, finish_new, 1)
+          probe_path.write_text(probe, encoding="utf-8")
+
+          todo_path = Path("docs/TODO.md")
+          todo = todo_path.read_text(encoding="utf-8")
+          pending = "- [ ] Add browser capability probing to `doctor`."
+          complete = "- [x] Add browser capability probing to `doctor`."
+          if complete not in todo:
+              if pending not in todo:
+                  raise SystemExit("browser doctor checklist item was not found")
+              todo = todo.replace(pending, complete, 1)
+          todo_path.write_text(todo, encoding="utf-8")
+          PY
+      - name: Apply repository formatting and safe lint fixes
+        run: |
+          pnpm exec eslint \
+            packages/cli/src/browser-probe.ts \
+            packages/cli/src/index.ts \
+            packages/cli/test/browser-probe.test.ts \
+            packages/web/e2e/browser-probe.pw.ts \
+            --fix
+          pnpm exec prettier --write \
+            .changeset/bright-browsers-doctor.md \
+            docs/TODO.md \
+            docs/browser-support.md \
+            eslint.config.js \
+            packages/cli/src/browser-probe.ts \
+            packages/cli/src/index.ts \
+            packages/cli/test/browser-probe.test.ts \
+            packages/web/e2e/browser-probe.pw.ts
+      - name: Commit the deterministic integration
+        shell: bash
+        run: |
+          git add \
+            .changeset/bright-browsers-doctor.md \
+            docs/TODO.md \
+            docs/browser-support.md \
+            eslint.config.js \
+            packages/cli/src/browser-probe.ts \
+            packages/cli/src/index.ts \
+            packages/cli/test/browser-probe.test.ts \
+            packages/web/e2e/browser-probe.pw.ts
+          if git diff --cached --quiet; then
+            echo "Browser doctor integration is already canonical."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Integrate browser capability probing into doctor"
+          git push origin HEAD:feat/browser-doctor-probe
