@@ -48,7 +48,7 @@
     "dev": "pnpm --filter @serve-droid/cli dev",
     "demo": "node scripts/demo-server.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --write packages/server/src/control.ts packages/server/test/control.test.ts && git diff -- packages/server/src/control.ts packages/server/test/control.test.ts && prettier --check .",
+    "format:check": "prettier --check .",
     "lint": "eslint .",
     "screenshot:readme": "pnpm --filter @serve-droid/web build && node scripts/capture-readme-screenshot.mjs",
     "test": "vitest run",
