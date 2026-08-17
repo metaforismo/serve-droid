@@ -51,11 +51,29 @@ function ok(stdout: string): RunResult {
 
 function jpeg(width = 3, height = 2): Buffer {
   return Buffer.from([
-    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08,
-    (height >> 8) & 0xff, height & 0xff,
-    (width >> 8) & 0xff, width & 0xff,
-    0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
-    0xff, 0xd9,
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x11,
+    0x08,
+    (height >> 8) & 0xff,
+    height & 0xff,
+    (width >> 8) & 0xff,
+    width & 0xff,
+    0x03,
+    0x01,
+    0x11,
+    0x00,
+    0x02,
+    0x11,
+    0x00,
+    0x03,
+    0x11,
+    0x00,
+    0xff,
+    0xd9,
   ]);
 }
 
@@ -86,7 +104,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop()));
 });
 
-async function connectVideo(url: string): Promise<WebSocket> {
+async function connectVideo(url: string, decodedFrameProvider = true): Promise<WebSocket> {
   const socket = new WebSocket(url.replace(/^http/u, "ws") + "/api/v1/video", [
     "serve-droid",
     "token.test-token",
@@ -96,6 +114,10 @@ async function connectVideo(url: string): Promise<WebSocket> {
     socket.once("open", resolve);
     socket.once("error", reject);
   });
+  if (decodedFrameProvider) {
+    socket.send(JSON.stringify({ schemaVersion: 1, type: "decoded-frame-provider" }));
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+  }
   return socket;
 }
 
@@ -139,6 +161,29 @@ describe("stream-first agent screenshots", () => {
     expect(response.headers.get("x-serve-droid-screenshot-height")).toBe("2");
     expect(Buffer.from(await response.arrayBuffer())).toEqual(jpeg());
     expect(service.screenshotCalls).toBe(0);
+  });
+
+  it("keeps legacy video-only clients on a binary-only output contract", async () => {
+    const service = new ScreenshotService(new FakeAdb(), device);
+    const server = new ServeDroidServer(service, {
+      token: "test-token",
+      videoSource: new FakeVideo(),
+    });
+    servers.push(server);
+    const session = await server.start();
+    const socket = await connectVideo(session.url, false);
+    let textMessages = 0;
+    socket.on("message", (_data, binary) => {
+      if (!binary) textMessages += 1;
+    });
+
+    const response = await screenshotRequest(session.url);
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-serve-droid-screenshot-source")).toBe("device");
+    expect(service.screenshotCalls).toBe(1);
+    expect(textMessages).toBe(0);
   });
 
   it("uses ADB immediately when no decoded-frame provider is connected", async () => {

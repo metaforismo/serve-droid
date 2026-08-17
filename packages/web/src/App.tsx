@@ -228,7 +228,10 @@ function Cockpit() {
         setDecoder(backend);
         socket = authenticatedWebSocket("/api/v1/video");
         socket.binaryType = "arraybuffer";
-        socket.onopen = () => setStatus(`Streaming · ${backend}`);
+        socket.onopen = () => {
+          setStatus(`Streaming · ${backend}`);
+          socket?.send(JSON.stringify({ schemaVersion: 1, type: "decoded-frame-provider" }));
+        };
         socket.onmessage = (event) => {
           if (typeof event.data === "string") {
             void handleDecodedFrameRequest(event.data, (message) => {

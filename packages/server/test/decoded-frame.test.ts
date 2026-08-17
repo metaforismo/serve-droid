@@ -19,11 +19,29 @@ class FakeProvider implements DecodedFrameProvider {
 
 function jpeg(width = 3, height = 2): Buffer {
   return Buffer.from([
-    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08,
-    (height >> 8) & 0xff, height & 0xff,
-    (width >> 8) & 0xff, width & 0xff,
-    0x03, 0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
-    0xff, 0xd9,
+    0xff,
+    0xd8,
+    0xff,
+    0xc0,
+    0x00,
+    0x11,
+    0x08,
+    (height >> 8) & 0xff,
+    height & 0xff,
+    (width >> 8) & 0xff,
+    width & 0xff,
+    0x03,
+    0x01,
+    0x11,
+    0x00,
+    0x02,
+    0x11,
+    0x00,
+    0x03,
+    0x11,
+    0x00,
+    0xff,
+    0xd9,
   ]);
 }
 
@@ -102,6 +120,28 @@ describe("DecodedFrameBroker", () => {
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
   });
 
+  it("serializes concurrent callers when their capture bounds differ", async () => {
+    const broker = new DecodedFrameBroker();
+    const provider = new FakeProvider();
+    broker.register(provider);
+
+    const first = broker.capture({ maxWidth: 1_080, quality: 75, timeoutMs: 250 });
+    const firstRequest = request(provider);
+    const second = broker.capture({ maxWidth: 320, quality: 60, timeoutMs: 250 });
+    expect(second).not.toBe(first);
+    expect(provider.sent).toHaveLength(1);
+
+    broker.receive(provider, frameResponse(firstRequest.id));
+    await expect(first).resolves.toMatchObject({ width: 3, height: 2 });
+    await new Promise((resolvePromise) => setImmediate(resolvePromise));
+
+    expect(provider.sent).toHaveLength(2);
+    const secondRequest = request(provider);
+    expect(secondRequest).toMatchObject({ maxWidth: 320, quality: 60 });
+    broker.receive(provider, frameResponse(secondRequest.id));
+    await expect(second).resolves.toMatchObject({ width: 3, height: 2 });
+  });
+
   it("allows another provider to win after one returns malformed data", async () => {
     const broker = new DecodedFrameBroker();
     const first = new FakeProvider();
@@ -126,7 +166,12 @@ describe("DecodedFrameBroker", () => {
 
     broker.receive(
       provider,
-      JSON.stringify({ schemaVersion: 1, type: "decoded-frame-error", id, code: "FRAME_NOT_READY" }),
+      JSON.stringify({
+        schemaVersion: 1,
+        type: "decoded-frame-error",
+        id,
+        code: "FRAME_NOT_READY",
+      }),
     );
     await expect(pending).resolves.toBeNull();
   });

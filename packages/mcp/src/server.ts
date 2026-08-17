@@ -130,10 +130,7 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
   let activeSession: McpActiveSession | undefined;
   const selectedService = async (device?: string) => {
     const session = activeSession;
-    if (
-      session &&
-      (!device || device.toLowerCase() === session.info.device.serial.toLowerCase())
-    ) {
+    if (session && (!device || device.toLowerCase() === session.info.device.serial.toLowerCase())) {
       return {
         current: session.service,
         temporary: false,

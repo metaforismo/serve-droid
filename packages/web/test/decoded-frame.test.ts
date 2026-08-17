@@ -42,9 +42,9 @@ describe("decoded frame responder", () => {
     const send = vi.fn();
     const capture = vi.fn(() => Promise.resolve({ blob: jpegBlob(), width: 3, height: 2 }));
 
-    await expect(
-      handleDecodedFrameRequest(JSON.stringify(request), send, capture),
-    ).resolves.toBe(true);
+    await expect(handleDecodedFrameRequest(JSON.stringify(request), send, capture)).resolves.toBe(
+      true,
+    );
 
     expect(capture).toHaveBeenCalledWith({
       maxWidth: 1_080,

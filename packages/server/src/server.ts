@@ -31,6 +31,7 @@ import {
   DECODED_FRAME_DEFAULT_WIDTH,
   DECODED_FRAME_MAX_PAYLOAD,
   DecodedFrameBroker,
+  isDecodedFrameProviderHello,
   jpegDimensions,
 } from "./decoded-frame.js";
 
@@ -259,17 +260,21 @@ export class ServeDroidServer {
     });
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#videoWebSocket.on("connection", (socket) => {
-      const unregister = this.#decodedFrames.register(socket);
+      let unregister: (() => void) | undefined;
       socket.on("message", (message, binary) => {
         if (binary) return;
         const value = Array.isArray(message)
           ? Buffer.concat(message).toString("utf8")
           : Buffer.isBuffer(message)
             ? message.toString("utf8")
-            : Buffer.from(message as ArrayBuffer).toString("utf8");
-        this.#decodedFrames.receive(socket, value);
+            : Buffer.from(message).toString("utf8");
+        if (!unregister && isDecodedFrameProviderHello(value)) {
+          unregister = this.#decodedFrames.register(socket);
+          return;
+        }
+        if (unregister) this.#decodedFrames.receive(socket, value);
       });
-      socket.once("close", unregister);
+      socket.once("close", () => unregister?.());
     });
     this.#controlWebSocket.on("connection", (socket) => {
       socket.on("message", (message) => {
@@ -303,7 +308,10 @@ export class ServeDroidServer {
       throw new ServeDroidError("INVALID_ARGUMENT", "Screenshot width must be between 1 and 2048.");
     }
     if (!Number.isInteger(quality) || quality < 25 || quality > 95) {
-      throw new ServeDroidError("INVALID_ARGUMENT", "Screenshot quality must be between 25 and 95.");
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Screenshot quality must be between 25 and 95.",
+      );
     }
 
     const stream = await this.#decodedFrames.capture({ maxWidth: width, quality });
@@ -458,7 +466,8 @@ export class ServeDroidServer {
           "x-serve-droid-screenshot-source": capture.source,
           "x-serve-droid-screenshot-captured-at": capture.capturedAt,
         };
-        if (capture.width !== null) headers["x-serve-droid-screenshot-width"] = String(capture.width);
+        if (capture.width !== null)
+          headers["x-serve-droid-screenshot-width"] = String(capture.width);
         if (capture.height !== null)
           headers["x-serve-droid-screenshot-height"] = String(capture.height);
         response.writeHead(200, headers);

@@ -6,12 +6,19 @@ All responses include `schemaVersion: 1`. Every endpoint except `GET /api/v1/hea
 - `GET /api/v1/devices`, `/session`, `/observe`, `/tree`, `/screenshot`
 - `GET /api/v1/logs` uses Server-Sent Events.
 - `GET /api/v1/recording` returns the bounded local recorder status or `null`.
-- `GET /api/v1/video` upgrades to a binary H.264 WebSocket.
+- `GET /api/v1/video` upgrades to a binary H.264 WebSocket. Clients that explicitly opt into the
+  decoded-frame extension may additionally exchange the bounded JSON messages described below.
 - `GET /api/v1/control` upgrades to a JSON action WebSocket.
 - `POST /api/v1/actions`, `/apps`, `/permissions`, `/files` mutate device state.
 
 Browser WebSockets pass `serve-droid, token.<base64url-token>` in `Sec-WebSocket-Protocol`.
 Credentials never appear in URL query parameters.
+
+Decoded-frame screenshots are an opt-in extension to the video socket. A capable browser sends
+`{"schemaVersion":1,"type":"decoded-frame-provider"}` after the socket opens. Only a socket that
+sent that declaration is eligible to receive a `capture-decoded-frame` text request or return a
+`decoded-frame` response. Video clients that do not opt in preserve the original binary-only H.264
+output contract.
 
 Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to
 `/sdcard/Download`. The limit is 256 MiB. Browser clients report byte-accurate request upload

@@ -65,6 +65,18 @@ interface DecodedFrameResponse {
   data?: unknown;
 }
 
+export function isDecodedFrameProviderHello(raw: string): boolean {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    return false;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.schemaVersion === 1 && record.type === "decoded-frame-provider";
+}
+
 function boundedInteger(value: number, minimum: number, maximum: number, name: string): number {
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
@@ -99,6 +111,15 @@ function normalizeOptions(options: DecodedFrameCaptureOptions): NormalizedOption
       "timeoutMs",
     ),
   };
+}
+
+function sameOptions(left: NormalizedOptions, right: NormalizedOptions): boolean {
+  return (
+    left.maxWidth === right.maxWidth &&
+    left.quality === right.quality &&
+    left.maxBytes === right.maxBytes &&
+    left.timeoutMs === right.timeoutMs
+  );
 }
 
 function isStartOfFrame(marker: number): boolean {
@@ -217,11 +238,13 @@ export class DecodedFrameBroker {
     if (pending.providers.size === 0) this.#finish(pending, null);
   }
 
-  public capture(
-    options: DecodedFrameCaptureOptions = {},
-  ): Promise<DecodedFrameCapture | null> {
-    if (this.#pending) return this.#pending.promise;
+  public capture(options: DecodedFrameCaptureOptions = {}): Promise<DecodedFrameCapture | null> {
     const normalized = normalizeOptions(options);
+    const active = this.#pending;
+    if (active) {
+      if (sameOptions(active, normalized)) return active.promise;
+      return active.promise.then(() => this.capture(normalized));
+    }
     const providers = new Set(
       [...this.#providers].filter(
         (provider) =>

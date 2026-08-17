@@ -9,9 +9,11 @@ function sourceCanvas(width = 2_000, height = 1_000): HTMLCanvasElement {
   return { width, height } as HTMLCanvasElement;
 }
 
-function outputCanvas(
-  encode: (quality: number) => Blob | null,
-): { canvas: HTMLCanvasElement; drawImage: ReturnType<typeof vi.fn>; qualities: number[] } {
+function outputCanvas(encode: (quality: number) => Blob | null): {
+  canvas: HTMLCanvasElement;
+  drawImage: ReturnType<typeof vi.fn>;
+  qualities: number[];
+} {
   const drawImage = vi.fn();
   const qualities: number[] = [];
   const canvas = {
