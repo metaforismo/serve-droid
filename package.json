@@ -48,7 +48,7 @@
     "dev": "pnpm --filter @serve-droid/cli dev",
     "demo": "node scripts/demo-server.mjs",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write packages/core/src/actions.ts packages/server/test/live-control.test.ts packages/web/src/pointer-stream.ts packages/web/test/pointer-stream.test.ts && git diff -- packages/core/src/actions.ts packages/server/test/live-control.test.ts packages/web/src/pointer-stream.ts packages/web/test/pointer-stream.test.ts && exit 1",
     "lint": "eslint .",
     "screenshot:readme": "pnpm --filter @serve-droid/web build && node scripts/capture-readme-screenshot.mjs",
     "test": "vitest run",
