@@ -34,6 +34,8 @@ jobs:
           if [ -f scripts/harden-decoded-frame.py ]; then
             python3 scripts/harden-decoded-frame.py
           fi
+      - name: Format generated changes
+        run: pnpm format
       - name: Verify repository
         run: pnpm verify
       - name: Commit generated product changes
