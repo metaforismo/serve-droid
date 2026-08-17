@@ -46,6 +46,7 @@ jobs:
           PY
           pnpm exec prettier --write packages/cli/src/browser-probe.ts
           pnpm exec eslint packages/cli/src/browser-probe.ts
+          pnpm typecheck
           pnpm exec vitest run packages/cli/test/browser-probe.test.ts
       - name: Commit the lifecycle fix
         shell: bash
