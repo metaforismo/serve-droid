@@ -529,20 +529,46 @@ export class ServeDroidServer {
 
   async #action(body: Record<string, unknown>): Promise<unknown> {
     const type = stringValue(body.type);
-    if (type === "tap") await this.service.actions.tap(Number(body.x), Number(body.y));
-    else if (type === "swipe")
-      await this.service.actions.swipe(
-        Number(body.x1),
-        Number(body.y1),
-        Number(body.x2),
-        Number(body.y2),
-        Number(body.durationMs ?? 300),
-      );
-    else if (type === "gesture") await this.service.actions.gesture(body.gesture as Gesture);
-    else if (type === "type") await this.service.actions.typeText(stringValue(body.text));
+    const pointer = this.#video.control;
+    let pointerTransport: "scrcpy" | "adb" | undefined;
+
+    if (type === "tap") {
+      const x = Number(body.x);
+      const y = Number(body.y);
+      if (pointer) {
+        await pointer.tap(x, y);
+        pointerTransport = "scrcpy";
+      } else {
+        await this.service.actions.tap(x, y);
+        pointerTransport = "adb";
+      }
+    } else if (type === "swipe") {
+      const x1 = Number(body.x1);
+      const y1 = Number(body.y1);
+      const x2 = Number(body.x2);
+      const y2 = Number(body.y2);
+      const durationMs = Number(body.durationMs ?? 300);
+      if (pointer) {
+        await pointer.swipe(x1, y1, x2, y2, durationMs);
+        pointerTransport = "scrcpy";
+      } else {
+        await this.service.actions.swipe(x1, y1, x2, y2, durationMs);
+        pointerTransport = "adb";
+      }
+    } else if (type === "gesture") {
+      const gesture = body.gesture as Gesture;
+      if (pointer) {
+        await pointer.gesture(gesture);
+        pointerTransport = "scrcpy";
+      } else {
+        await this.service.actions.gesture(gesture);
+        pointerTransport = "adb";
+      }
+    } else if (type === "type") await this.service.actions.typeText(stringValue(body.text));
     else if (type === "key") await this.service.actions.key(body.key as never);
     else if (type === "rotate") await this.service.actions.rotate(body.orientation as never);
     else throw new ServeDroidError("INVALID_ARGUMENT", `Unsupported action '${type}'.`);
+
     const details: Record<string, unknown> = {};
     if (type === "tap") Object.assign(details, { x: Number(body.x), y: Number(body.y) });
     else if (type === "swipe")
@@ -560,6 +586,7 @@ export class ServeDroidServer {
     else if (type === "type") details.textLength = stringValue(body.text).length;
     else if (type === "key") details.key = stringValue(body.key);
     else if (type === "rotate") details.orientation = stringValue(body.orientation);
+    if (pointerTransport) details.transport = pointerTransport;
     this.#recorder?.recordEvent("action", { action: type, ...details });
     return { schemaVersion: SCHEMA_VERSION, ok: true };
   }
