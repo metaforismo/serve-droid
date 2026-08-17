@@ -23,15 +23,25 @@ Rotation actions complete only after the device reports the requested logical or
 display metadata does not settle within five seconds, the action fails instead of allowing a later
 normalized coordinate action to use stale dimensions.
 
+Tap, swipe, and multi-point gesture requests use the control writer from the active scrcpy video
+session whenever it is available. Normalized coordinates are mapped against a snapshot of that
+encoded frame's dimensions. One finger lifecycle is serialized, generated move messages and queued
+actions are bounded, and an active failed gesture receives a best-effort cancel. ADB input is the
+startup and helper-replacement fallback only. Once scrcpy injection begins, an error is returned as
+`TRANSPORT_FAILED`; the action is not replayed through ADB because doing so could duplicate a tap or
+complete only part of a gesture. Browser wheel and trackpad bursts are coalesced into swipe actions,
+so they use the same control path without creating one device command per browser event.
+
 UI hierarchy capture verifies display metadata and foreground app identity before and after the
 UIAutomator dump, then checks declared element packages against that app. A context or package
 change triggers one fresh capture; a second mismatch fails with `TRANSPORT_FAILED` rather than
 returning elements from a mixed snapshot. Hierarchies that omit package attributes remain valid.
 
 The scrcpy video helper has one restart attempt per session. The first startup or runtime failure
-replaces the helper while keeping browser clients connected. A second failure is terminal and is
-reported as `TRANSPORT_FAILED` with bounded restart metadata; duplicate errors from the failed
-helper cannot consume additional attempts.
+replaces the helper while keeping browser clients connected. The pointer controller is retired with
+the failed helper and the replacement controller becomes visible only after its video metadata is
+ready. A second failure is terminal and is reported as `TRANSPORT_FAILED` with bounded restart
+metadata; duplicate errors from the failed helper cannot consume additional attempts.
 
 Log streams are scoped to the current foreground package and PID by default. Pass `package=<id>` to
 follow a different package or `system=true` to opt into unfiltered system logs. These options are
