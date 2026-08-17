@@ -1,65 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
-declare global {
-  interface Window {
-    __livePointerMessages: Array<Record<string, unknown>>;
-    __livePointerControlOpen: boolean;
-  }
-}
+async function openCockpit(
+  page: Page,
+  actions: Array<Record<string, unknown>>,
+  controlMessages: Array<Record<string, unknown>>,
+): Promise<void> {
+  let controlOpen = false;
+  let controlProtocols: string[] = [];
 
-async function openCockpit(page: Page, actions: Array<Record<string, unknown>>): Promise<void> {
-  await page.addInitScript(() => {
-    const bootstrap = { token: "browser-test-token" };
-    Object.defineProperty(globalThis, "__SERVE_DROID_BOOTSTRAP__", {
-      configurable: true,
-      writable: true,
-      value: bootstrap,
+  await page.routeWebSocket("**/api/v1/control", (socket) => {
+    controlOpen = true;
+    controlProtocols = [...socket.protocols()];
+    socket.onMessage((message) => {
+      controlMessages.push(JSON.parse(String(message)) as Record<string, unknown>);
+      socket.send(JSON.stringify({ schemaVersion: 1, ok: true }));
     });
-    window.__livePointerMessages = [];
-    window.__livePointerControlOpen = false;
-
-    class MockWebSocket {
-      public readyState = WebSocket.CONNECTING;
-      public binaryType: BinaryType = "blob";
-      public onopen: ((event: Event) => unknown) | null = null;
-      public onmessage: ((event: MessageEvent) => unknown) | null = null;
-      public onerror: ((event: Event) => unknown) | null = null;
-      public onclose: ((event: CloseEvent) => unknown) | null = null;
-      readonly #url: string;
-
-      public constructor(url: string) {
-        this.#url = url;
-        queueMicrotask(() => {
-          if (this.readyState === WebSocket.CLOSED) return;
-          this.readyState = WebSocket.OPEN;
-          if (this.#url.endsWith("/api/v1/control")) {
-            window.__livePointerControlOpen = true;
-          }
-          this.onopen?.(new Event("open"));
-        });
-      }
-
-      public send(value: unknown): void {
-        if (!this.#url.endsWith("/api/v1/control") || typeof value !== "string") return;
-        window.__livePointerMessages.push(JSON.parse(value) as Record<string, unknown>);
-        queueMicrotask(() => {
-          this.onmessage?.(
-            new MessageEvent("message", {
-              data: JSON.stringify({ schemaVersion: 1, ok: true }),
-            }),
-          );
-        });
-      }
-
-      public close(code = 1000, reason = ""): void {
-        if (this.readyState === WebSocket.CLOSED) return;
-        this.readyState = WebSocket.CLOSED;
-        this.onclose?.(new CloseEvent("close", { code, reason }));
-      }
-    }
-
-    window.__SERVE_DROID_WEBSOCKET_FACTORY__ = (url) =>
-      new MockWebSocket(url) as unknown as WebSocket;
   });
 
   await page.route("**/api/v1/actions", async (route) => {
@@ -115,39 +70,39 @@ async function openCockpit(page: Page, actions: Array<Record<string, unknown>>):
   await expect(
     page.getByLabel("Live Android device. Click to tap or drag to swipe."),
   ).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.__livePointerControlOpen)).toBe(true);
+  await expect.poll(() => controlOpen).toBe(true);
+  expect(controlProtocols).toEqual(["serve-droid", "token.browser-test-token"]);
 }
 
-function phases(page: Page): Promise<string[]> {
-  return page.evaluate(() =>
-    window.__livePointerMessages.flatMap((message) => {
-      const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
-      return gesture?.stream?.phase ? [gesture.stream.phase] : [];
-    }),
-  );
+function phases(messages: Array<Record<string, unknown>>): string[] {
+  return messages.flatMap((message) => {
+    const gesture = message.gesture as { stream?: { phase?: string } } | undefined;
+    return gesture?.stream?.phase ? [gesture.stream.phase] : [];
+  });
 }
 
 test("forwards drag movement before pointer release without duplicating the HTTP action", async ({
   page,
 }) => {
   const actions: Array<Record<string, unknown>> = [];
-  await openCockpit(page, actions);
+  const controlMessages: Array<Record<string, unknown>> = [];
+  await openCockpit(page, actions, controlMessages);
   const canvas = page.getByLabel("Live Android device. Click to tap or drag to swipe.");
   const bounds = await canvas.boundingBox();
   expect(bounds).not.toBeNull();
 
   await page.mouse.move(bounds!.x + bounds!.width * 0.35, bounds!.y + bounds!.height * 0.7);
   await page.mouse.down();
-  await expect.poll(() => phases(page)).toContain("begin");
+  await expect.poll(() => phases(controlMessages)).toContain("begin");
 
   await page.mouse.move(bounds!.x + bounds!.width * 0.7, bounds!.y + bounds!.height * 0.3, {
     steps: 5,
   });
-  await expect.poll(() => phases(page)).toContain("move");
+  await expect.poll(() => phases(controlMessages)).toContain("move");
   expect(actions).toHaveLength(0);
 
   await page.mouse.up();
-  await expect.poll(() => phases(page)).toContain("end");
+  await expect.poll(() => phases(controlMessages)).toContain("end");
   expect(actions).toHaveLength(0);
   await expect(page.getByTestId("live-pointer-feedback")).toContainText("Live drag completed");
 });
