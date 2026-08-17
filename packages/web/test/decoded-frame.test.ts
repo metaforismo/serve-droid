@@ -40,7 +40,7 @@ describe("decoded frame responder", () => {
 
   it("returns a bounded base64 JPEG from the decoded canvas capture", async () => {
     const send = vi.fn();
-    const capture = vi.fn(async () => ({ blob: jpegBlob(), width: 3, height: 2 }));
+    const capture = vi.fn(() => Promise.resolve({ blob: jpegBlob(), width: 3, height: 2 }));
 
     await expect(
       handleDecodedFrameRequest(JSON.stringify(request), send, capture),
@@ -64,7 +64,7 @@ describe("decoded frame responder", () => {
 
   it("reports a frame that is not ready without throwing", async () => {
     const send = vi.fn();
-    await handleDecodedFrameRequest(JSON.stringify(request), send, async () => null);
+    await handleDecodedFrameRequest(JSON.stringify(request), send, () => Promise.resolve(null));
     expect(JSON.parse(send.mock.calls[0]![0] as string)).toMatchObject({
       type: "decoded-frame-error",
       id: request.id,
@@ -74,10 +74,8 @@ describe("decoded frame responder", () => {
 
   it("rejects malformed and oversized captures before sending image bytes", async () => {
     const malformed = vi.fn();
-    await handleDecodedFrameRequest(
-      JSON.stringify({ ...request, quality: 100 }),
-      malformed,
-      async () => ({ blob: jpegBlob(), width: 3, height: 2 }),
+    await handleDecodedFrameRequest(JSON.stringify({ ...request, quality: 100 }), malformed, () =>
+      Promise.resolve({ blob: jpegBlob(), width: 3, height: 2 }),
     );
     expect(JSON.parse(malformed.mock.calls[0]![0] as string)).toMatchObject({
       type: "decoded-frame-error",
@@ -85,11 +83,13 @@ describe("decoded frame responder", () => {
     });
 
     const oversized = vi.fn();
-    await handleDecodedFrameRequest(JSON.stringify(request), oversized, async () => ({
-      blob: new Blob([new Uint8Array(request.maxBytes + 1)], { type: "image/jpeg" }),
-      width: 3,
-      height: 2,
-    }));
+    await handleDecodedFrameRequest(JSON.stringify(request), oversized, () =>
+      Promise.resolve({
+        blob: new Blob([new Uint8Array(request.maxBytes + 1)], { type: "image/jpeg" }),
+        width: 3,
+        height: 2,
+      }),
+    );
     expect(JSON.parse(oversized.mock.calls[0]![0] as string)).toMatchObject({
       type: "decoded-frame-error",
       code: "FRAME_INVALID",
@@ -98,9 +98,9 @@ describe("decoded frame responder", () => {
 
   it("converts capture exceptions into a bounded protocol error", async () => {
     const send = vi.fn();
-    await handleDecodedFrameRequest(JSON.stringify(request), send, async () => {
-      throw new Error("canvas is tainted");
-    });
+    await handleDecodedFrameRequest(JSON.stringify(request), send, () =>
+      Promise.reject(new Error("canvas is tainted")),
+    );
     expect(JSON.parse(send.mock.calls[0]![0] as string)).toMatchObject({
       type: "decoded-frame-error",
       code: "FRAME_CAPTURE_FAILED",
