@@ -14,6 +14,10 @@ All responses include `schemaVersion: 1`. Every endpoint except `GET /api/v1/hea
 Browser WebSockets pass `serve-droid, token.<base64url-token>` in `Sec-WebSocket-Protocol`.
 Credentials never appear in URL query parameters.
 
+Authenticated JSON mutation bodies and control WebSocket messages must decode to JSON objects.
+Malformed JSON and valid non-object JSON such as `null` or arrays fail as `INVALID_ARGUMENT` before
+device input is attempted.
+
 Decoded-frame screenshots are an opt-in extension to the video socket. A capable browser sends
 `{"schemaVersion":1,"type":"decoded-frame-provider"}` after the socket opens. Only a socket that
 sent that declaration is eligible to receive a `capture-decoded-frame` text request or return a
@@ -21,10 +25,12 @@ sent that declaration is eligible to receive a `capture-decoded-frame` text requ
 output contract.
 
 Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to
-`/sdcard/Download`. The limit is 256 MiB. Browser clients report byte-accurate request upload
-progress, then switch to a distinct indeterminate install or push phase while waiting for ADB. The
-server does not invent a percentage for Android-side work. Successful responses identify the
-`install` or `push` operation and include the remote destination for pushed files.
+`/sdcard/Download`. The limit is 256 MiB. Malformed URI encoding or NUL-containing file names fail
+as `INVALID_ARGUMENT` before a temporary file or ADB operation is created. Browser clients report
+byte-accurate request upload progress, then switch to a distinct indeterminate install or push phase
+while waiting for ADB. The server does not invent a percentage for Android-side work. Successful
+responses identify the `install` or `push` operation and include the remote destination for pushed
+files.
 
 Rotation actions complete only after the device reports the requested logical orientation. If
 display metadata does not settle within five seconds, the action fails instead of allowing a later
@@ -113,3 +119,9 @@ and retry safely when new entries arrive, so a long-lived stream cannot continue
 from the previous process. CLI `logs` and MCP `android_read_logs` use the foreground package by
 default, accept an explicit package override, and require an explicit `--system` or `system: true`
 opt-in for unfiltered logs.
+
+HTTP Logcat streams emit Server-Sent Event `id` fields equal to each log cursor. A reconnect can send
+`Last-Event-ID`; the server resumes after the newer valid cursor from that header or the explicit
+`since` query parameter. If `ServerResponse.write()` reports backpressure, the server ends that SSE
+response and removes its live-log subscription instead of accumulating an unbounded response queue.
+This is a bounded-memory and resume contract, not a claim of lossless delivery across disconnects.

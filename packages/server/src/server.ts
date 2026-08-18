@@ -3,7 +3,7 @@ import { createReadStream, existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { tmpdir } from "node:os";
-import { basename, extname, join, normalize, resolve } from "node:path";
+import { extname, join, normalize, resolve } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, WebSocket } from "ws";
@@ -23,6 +23,12 @@ import {
   type VideoSource,
 } from "./video.js";
 import { removeSessionState, writeSessionState } from "./state.js";
+import {
+  decodeUploadName,
+  parseJsonObject,
+  sseResumeCursor,
+  writeSseLogFrame,
+} from "./transport-boundaries.js";
 import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
 import type { TunnelStatus } from "./tunnel.js";
 import { listenHttpServer } from "./listen.js";
@@ -148,12 +154,7 @@ async function readBody(request: IncomingMessage, limit = JSON_LIMIT): Promise<B
 }
 
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> {
-  const body = await readBody(request);
-  try {
-    return JSON.parse(body.toString("utf8")) as Record<string, unknown>;
-  } catch {
-    throw new ServeDroidError("INVALID_ARGUMENT", "Request body must be valid JSON.");
-  }
+  return parseJsonObject((await readBody(request)).toString("utf8"));
 }
 
 export class ServeDroidServer {
@@ -613,16 +614,30 @@ export class ServeDroidServer {
     since: string,
     packageName?: string,
   ): Promise<void> {
-    const initial = await this.service.readLogs(since, packageName);
+    const resumeFrom = sseResumeCursor(since, request.headers["last-event-id"]);
+    const initial = await this.service.readLogs(resumeFrom, packageName);
     response.writeHead(200, {
       "content-type": "text/event-stream",
       "cache-control": "no-store",
       connection: "keep-alive",
     });
-    const write = (entry: unknown) => response.write(`data: ${JSON.stringify(entry)}\n\n`);
-    for (const entry of initial.entries) write(entry);
-    const unsubscribe = this.service.subscribeLogs(packageName, write);
-    request.once("close", unsubscribe);
+    let unsubscribe: (() => void) | undefined;
+    const write = (entry: Parameters<typeof writeSseLogFrame>[1]): boolean => {
+      const writable = writeSseLogFrame(response, entry);
+      if (!writable) {
+        unsubscribe?.();
+        unsubscribe = undefined;
+      }
+      return writable;
+    };
+    for (const entry of initial.entries) {
+      if (!write(entry)) return;
+    }
+    unsubscribe = this.service.subscribeLogs(packageName, (entry) => void write(entry));
+    request.once("close", () => {
+      unsubscribe?.();
+      unsubscribe = undefined;
+    });
   }
 
   async #action(body: Record<string, unknown>): Promise<unknown> {
@@ -724,10 +739,7 @@ export class ServeDroidServer {
   }
 
   async #file(request: IncomingMessage): Promise<unknown> {
-    const encodedName = String(request.headers["x-file-name"] ?? "");
-    const name = basename(decodeURIComponent(encodedName));
-    if (!name || name === "." || name === "..")
-      throw new ServeDroidError("INVALID_ARGUMENT", "x-file-name is required.");
+    const name = decodeUploadName(String(request.headers["x-file-name"] ?? ""));
     const directory = await mkdtemp(join(tmpdir(), "serve-droid-upload-"));
     const path = join(directory, name);
     try {
@@ -776,7 +788,7 @@ export class ServeDroidServer {
 
   async #handleControl(socket: WebSocket, raw: string): Promise<void> {
     try {
-      const result = await this.#action(JSON.parse(raw) as Record<string, unknown>);
+      const result = await this.#action(parseJsonObject(raw));
       socket.send(JSON.stringify(result));
     } catch (error) {
       socket.send(JSON.stringify(errorBody(error)));
