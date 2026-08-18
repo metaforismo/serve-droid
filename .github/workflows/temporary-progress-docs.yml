@@ -1,0 +1,59 @@
+name: Temporary progress docs
+
+on:
+  push:
+    branches:
+      - feature/install-push-progress
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/install-push-progress
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@10.28.0
+      - run: pnpm install --frozen-lockfile
+      - name: Update docs and remove temporary workflow
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          protocol = Path("docs/protocol.md")
+          text = protocol.read_text()
+          old = '''Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to\n`/sdcard/Download`. The limit is 256 MiB. Malformed URI encoding or NUL-containing file names fail\nas `INVALID_ARGUMENT` before a temporary file or ADB operation is created. Browser clients report\nbyte-accurate request upload progress, then switch to a distinct indeterminate install or push phase\nwhile waiting for ADB. The server does not invent a percentage for Android-side work. Successful\nresponses identify the `install` or `push` operation and include the remote destination for pushed\nfiles.\n'''
+          new = '''Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to\n`/sdcard/Download`. The limit is 256 MiB. Malformed URI encoding or NUL-containing file names fail\nas `INVALID_ARGUMENT` before a temporary file or ADB operation is created. Browser clients report\nbyte-accurate request upload progress, then switch to a distinct indeterminate install or push phase\nwhile waiting for ADB. The server does not invent a percentage for Android-side work. Successful\nresponses identify the `install` or `push` operation and include the remote destination for pushed\nfiles.\n\n`POST /api/v1/files` keeps that JSON response as its default contract. A client may opt into\nAndroid-side progress by sending `Accept: text/event-stream`. After the complete upload body has\nbeen received and bounded, the server starts an SSE response and emits `event: progress` envelopes\nwith `type: "file-progress"`, the `install` or `push` operation, and an active `installing` or\n`pushing` phase. It later emits terminal `completed` or `failed` progress, followed by exactly one\n`event: result` containing the existing success envelope or `event: error` containing the normal\ntyped error envelope. Because headers have already been sent when an Android action later fails,\nthat streamed failure remains HTTP 200 and the error event is authoritative. Tests block ADB install\nand verify that the active phase is readable before the Android command completes. CLI `app install`\nand `push` mirror the active/completed steps on stderr; `--json` therefore keeps the final\nmachine-readable result on stdout.\n'''
+          if old not in text:
+              raise SystemExit("protocol upload paragraph not found")
+          protocol.write_text(text.replace(old, new, 1))
+
+          mcp = Path("docs/mcp.md")
+          text = mcp.read_text()
+          anchor = '''`android_observe` returns one JPEG image plus compact JSON metadata. It never emits raw XML or an\nunbounded Logcat dump. Destructive app operations require `confirm: true`.\n'''
+          addition = anchor + '''\nWhen an MCP caller includes a progress token, `android_manage_app` with `operation: "install"` and\n`android_push_file` emit standard `notifications/progress` messages. Step `1/2` means the Android\ninstall or push is active and `2/2` means it completed. These are monotonic operation steps, not a\npercentage estimate. Callers that do not request progress receive no extra notifications, and the\nnormal tool result or error remains authoritative.\n'''
+          if anchor not in text:
+              raise SystemExit("MCP progress insertion anchor not found")
+          mcp.write_text(text.replace(anchor, addition, 1))
+
+          todo = Path("docs/TODO.md")
+          text = todo.read_text()
+          old = "- [ ] Add progress events for installs and pushes."
+          new = "- [x] Add progress events for installs and pushes across CLI, streamed HTTP/browser uploads, and MCP."
+          if old not in text:
+              raise SystemExit("TODO progress item not found")
+          todo.write_text(text.replace(old, new, 1))
+          PY
+          pnpm exec prettier --write docs/protocol.md docs/mcp.md docs/TODO.md
+          rm .github/workflows/temporary-progress-docs.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/protocol.md docs/mcp.md docs/TODO.md .github/workflows/temporary-progress-docs.yml
+          git diff --cached --quiet || git commit -m "Document install and push progress contracts"
+          git push origin HEAD:feature/install-push-progress
