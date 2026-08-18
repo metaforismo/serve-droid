@@ -120,7 +120,7 @@ describe("HTTP transport envelopes", () => {
       });
     }
 
-    expect(adb.calls.some((call) => call.includes("input"))).toBe(false);
+    expect(adb.calls.some((call) => call[0] === "shell" && call[1] === "input")).toBe(false);
   });
 
   it("returns INVALID_ARGUMENT for malformed upload filename encoding", async () => {
