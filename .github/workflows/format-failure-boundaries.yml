@@ -1,0 +1,42 @@
+name: Format failure boundaries
+
+on:
+  push:
+    branches:
+      - hardening/failure-boundaries
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[failure-boundaries-formatted]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PNPM_VERSION: 10.28.0
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/failure-boundaries
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@${PNPM_VERSION}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Canonicalize focused files
+        run: pnpm exec prettier --write packages/core/test/failure-boundaries.test.ts packages/core/src/logs.ts packages/core/src/ui-tree.ts
+      - name: Remove temporary formatter and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/format-failure-boundaries.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/core/test/failure-boundaries.test.ts packages/core/src/logs.ts packages/core/src/ui-tree.ts
+          git diff --cached --check
+          git commit -m 'Format failure-boundary hardening [failure-boundaries-formatted]'
+          git push origin HEAD:hardening/failure-boundaries
