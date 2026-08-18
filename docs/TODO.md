@@ -131,7 +131,7 @@ because its code path compiles.
 - [x] Test HTTP authentication and vendored scrcpy checksum.
 - [x] Configure a pinned Linux Android emulator CI job.
 - [x] Add Gradle Wrapper files and build the fixture APK in CI.
-- [ ] Execute the complete install-launch-observe-act-crash-log-relaunch agent scenario.
+- [x] Execute the complete install-launch-observe-act-crash-log-relaunch agent scenario.
 - [ ] Test helper crash, stale state, port conflict, disconnect, reconnect, malformed XML, and large logs.
 - [ ] Verify one emulator and one USB device on macOS.
 - [ ] Verify one emulator and one USB device on Linux.
