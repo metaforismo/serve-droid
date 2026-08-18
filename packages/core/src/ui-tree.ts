@@ -39,7 +39,94 @@ function stableId(path: string, node: XmlNode): string {
     .slice(0, 16);
 }
 
+function tagEnd(xml: string, start: number): number {
+  let quote: '"' | "'" | null = null;
+  for (let index = start + 1; index < xml.length; index += 1) {
+    const value = xml[index];
+    if (quote) {
+      if (value === quote) quote = null;
+      continue;
+    }
+    if (value === '"' || value === "'") {
+      quote = value;
+      continue;
+    }
+    if (value === ">") return index;
+  }
+  return -1;
+}
+
+function hasBalancedHierarchyMarkup(xml: string): boolean {
+  const stack: string[] = [];
+  let rootSeen = false;
+  let rootClosed = false;
+  let cursor = 0;
+
+  while (cursor < xml.length) {
+    const start = xml.indexOf("<", cursor);
+    if (start < 0) break;
+
+    if (xml.startsWith("<!--", start)) {
+      const end = xml.indexOf("-->", start + 4);
+      if (end < 0) return false;
+      cursor = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<![CDATA[", start)) {
+      const end = xml.indexOf("]]>", start + 9);
+      if (end < 0) return false;
+      cursor = end + 3;
+      continue;
+    }
+    if (xml.startsWith("<?", start)) {
+      const end = xml.indexOf("?>", start + 2);
+      if (end < 0) return false;
+      cursor = end + 2;
+      continue;
+    }
+
+    const end = tagEnd(xml, start);
+    if (end < 0) return false;
+    let tag = xml.slice(start + 1, end).trim();
+    if (!tag) return false;
+    if (tag.startsWith("!")) {
+      cursor = end + 1;
+      continue;
+    }
+
+    const closing = tag.startsWith("/");
+    if (closing) tag = tag.slice(1).trimStart();
+    const selfClosing = !closing && tag.endsWith("/");
+    const match = /^([A-Za-z_][A-Za-z0-9_.:-]*)/u.exec(tag);
+    if (!match) return false;
+    const name = match[1]!;
+
+    if (!rootSeen) {
+      if (closing || name !== "hierarchy") return false;
+      rootSeen = true;
+    } else if (rootClosed && !closing) {
+      return false;
+    }
+
+    if (closing) {
+      if (stack.pop() !== name) return false;
+      if (stack.length === 0) rootClosed = true;
+    } else if (selfClosing) {
+      if (stack.length === 0) rootClosed = true;
+    } else {
+      stack.push(name);
+    }
+    cursor = end + 1;
+  }
+
+  return rootSeen && rootClosed && stack.length === 0;
+}
+
 export function parseUiHierarchy(xml: string, display: DisplayInfo): UiElement[] {
+  if (!hasBalancedHierarchyMarkup(xml)) {
+    throw new ServeDroidError("ADB_FAILED", "UIAutomator returned malformed XML.");
+  }
+
   let document: { hierarchy?: XmlNode };
   try {
     document = parser.parse(xml) as { hierarchy?: XmlNode };
@@ -49,7 +136,9 @@ export function parseUiHierarchy(xml: string, display: DisplayInfo): UiElement[]
     });
   }
   const root = document.hierarchy;
-  if (!root) return [];
+  if (!root) {
+    throw new ServeDroidError("ADB_FAILED", "UIAutomator XML did not contain a hierarchy root.");
+  }
   const output: UiElement[] = [];
   const visit = (node: XmlNode, path: string, parentId: string | null): void => {
     const id = stableId(path, node);
