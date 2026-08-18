@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import { SCHEMA_VERSION, type SessionInfo } from "@serve-droid/core";
+import { describe, expect, it, vi } from "vitest";
 import { verifySessionState } from "../src/state.js";
 
 const session: SessionInfo = {
@@ -51,33 +51,37 @@ describe("persisted session identity", () => {
   });
 
   it("rejects a healthy endpoint whose PID no longer matches the persisted session", async () => {
-    const fetcher = vi.fn(async () =>
-      new Response(JSON.stringify(publicSession({ pid: session.pid + 1 })), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(JSON.stringify(publicSession({ pid: session.pid + 1 })), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     ) as unknown as typeof fetch;
 
     await expect(verifySessionState(session, fetcher)).resolves.toBe(false);
   });
 
   it("rejects endpoints that do not authenticate the persisted token", async () => {
-    const fetcher = vi.fn(async () => new Response("unauthorized", { status: 401 })) as unknown as typeof fetch;
+    const fetcher = vi.fn(
+      async () => new Response("unauthorized", { status: 401 }),
+    ) as unknown as typeof fetch;
 
     await expect(verifySessionState(session, fetcher)).resolves.toBe(false);
   });
 
   it("rejects a different live session that reused the same port and PID", async () => {
-    const fetcher = vi.fn(async () =>
-      new Response(
-        JSON.stringify(
-          publicSession({
-            startedAt: "2026-08-18T10:05:00.000Z",
-            device: { ...session.device, serial: "emulator-5556" },
-          }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify(
+            publicSession({
+              startedAt: "2026-08-18T10:05:00.000Z",
+              device: { ...session.device, serial: "emulator-5556" },
+            }),
+          ),
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
     ) as unknown as typeof fetch;
 
     await expect(verifySessionState(session, fetcher)).resolves.toBe(false);
