@@ -109,7 +109,7 @@ describe("Logcat failure boundaries", () => {
     logs.stop();
   });
 
-  it("does not carry an unterminated fragment across Logcat restarts", async () => {
+  it("does not carry an unterminated fragment across an explicit Logcat restart", async () => {
     const adb = new StreamingAdb();
     const logs = new LogBuffer();
     logs.start(adb, "serial");
@@ -123,6 +123,25 @@ describe("Logcat failure boundaries", () => {
 
     expect(logs.read("0").entries).toEqual([
       expect.objectContaining({ message: "fresh process", pid: 1234 }),
+    ]);
+    logs.stop();
+  });
+
+  it("does not carry an unterminated fragment across an unexpected Logcat exit", async () => {
+    const adb = new StreamingAdb();
+    const logs = new LogBuffer();
+    logs.start(adb, "serial");
+    const first = adb.processes[0]!;
+    first.stdout.write("07-17 12:34:56.789  9999");
+    await flushStreams();
+
+    first.emit("close", 1);
+    logs.start(adb, "serial");
+    adb.processes[1]!.stdout.write(logLine("after crash"));
+    await flushStreams();
+
+    expect(logs.read("0").entries).toEqual([
+      expect.objectContaining({ message: "after crash", pid: 1234 }),
     ]);
     logs.stop();
   });
