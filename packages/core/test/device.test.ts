@@ -13,6 +13,7 @@ import {
 const enabled = process.env.SERVE_DROID_DEVICE_TEST === "1";
 const fixtureApk = process.env.SERVE_DROID_FIXTURE_APK;
 const FIXTURE_PACKAGE = "dev.servedroid.fixture";
+const INPUT_RESOURCE_ID = `${FIXTURE_PACKAGE}:id/name_input`;
 const POLL_INTERVAL_MS = 200;
 
 async function delay(milliseconds: number): Promise<void> {
@@ -135,10 +136,23 @@ describe.skipIf(!enabled)("real Android device", () => {
         expect(initial.schemaVersion).toBe(1);
 
         const input = findElement(initial.elements, {
-          resourceId: `${FIXTURE_PACKAGE}:id/name_input`,
+          resourceId: INPUT_RESOURCE_ID,
         });
         await tapElement(service, input);
         await service.actions.typeText("Ada");
+
+        await waitFor(
+          () => service.tree(),
+          (elements) => lookup(elements, { resourceId: INPUT_RESOURCE_ID })?.text === "Ada",
+          "the typed fixture input to become observable",
+        );
+
+        await service.actions.key("back");
+        await waitFor(
+          () => service.foreground(),
+          (foreground) => foreground.packageName === FIXTURE_PACKAGE,
+          "the fixture to remain foreground after dismissing the keyboard",
+        );
 
         const submit = await findTappableElement(service, {
           contentDescription: "Submit fixture form",
