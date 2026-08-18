@@ -68,7 +68,10 @@ function storedSession(value: unknown): SessionInfo | null {
   } catch {
     return null;
   }
-  if (session.recordingDirectory !== undefined && typeof session.recordingDirectory !== "string") {
+  if (
+    session.recordingDirectory !== undefined &&
+    typeof session.recordingDirectory !== "string"
+  ) {
     return null;
   }
   return session as unknown as SessionInfo;
@@ -120,7 +123,9 @@ export async function verifySessionState(
   }
 }
 
-export async function readSessionStates(fetcher: typeof fetch = fetch): Promise<SessionInfo[]> {
+export async function readSessionStates(
+  fetcher: typeof fetch = fetch,
+): Promise<SessionInfo[]> {
   let names: string[];
   try {
     names = await readdir(stateDirectory());
