@@ -1,5 +1,5 @@
 export interface McpProgressExtra {
-  _meta?: { progressToken?: string | number };
+  _meta?: { progressToken?: string | number | undefined };
   sendNotification(notification: {
     method: "notifications/progress";
     params: {
