@@ -132,7 +132,12 @@ because its code path compiles.
 - [x] Configure a pinned Linux Android emulator CI job.
 - [x] Add Gradle Wrapper files and build the fixture APK in CI.
 - [x] Execute the complete install-launch-observe-act-crash-log-relaunch agent scenario.
-- [ ] Test helper crash, stale state, port conflict, disconnect, reconnect, malformed XML, and large logs.
+- [x] Test scrcpy helper crash/restart budget and terminal failure.
+- [x] Reject stale hierarchy snapshots after display or foreground-app changes.
+- [x] Diagnose an occupied fixed port before any device startup work.
+- [x] Test browser control reconnect after a forced WebSocket failure.
+- [x] Reject malformed UIAutomator XML and bound fragmented, oversized, or unterminated Logcat input.
+- [x] Reject stale persisted session state before selection or shutdown.
 - [ ] Verify one emulator and one USB device on macOS.
 - [ ] Verify one emulator and one USB device on Linux.
 - [ ] Verify one emulator and one USB device on Windows.
