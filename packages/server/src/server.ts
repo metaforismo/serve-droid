@@ -44,6 +44,7 @@ import {
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
 const DEFAULT_VIDEO_CLIENT_LIMIT = 2;
+const VIDEO_BACKPRESSURE_BYTES = 4 * 1024 * 1024;
 
 export interface ServerOptions {
   host?: string;
@@ -80,6 +81,14 @@ export function encodeAudioPacket(data: Buffer, pts: bigint): Buffer {
 
 export function canSendAudio(bufferedAmount: number): boolean {
   return Number.isFinite(bufferedAmount) && bufferedAmount >= 0 && bufferedAmount < 512 * 1024;
+}
+
+export function canSendVideo(bufferedAmount: number): boolean {
+  return (
+    Number.isFinite(bufferedAmount) &&
+    bufferedAmount >= 0 &&
+    bufferedAmount < VIDEO_BACKPRESSURE_BYTES
+  );
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -227,7 +236,7 @@ export class ServeDroidServer {
     this.#video.on("data", (chunk) => {
       this.#recorder?.recordVideo(chunk);
       for (const client of this.#videoWebSocket.clients) {
-        if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 4 * 1024 * 1024)
+        if (client.readyState === WebSocket.OPEN && canSendVideo(client.bufferedAmount))
           client.send(chunk);
       }
     });

@@ -38,7 +38,9 @@ export class BoundedStdioServerTransport {
           this.#length = 0;
           this.#discardingOversizedLine = true;
           this.onerror?.(
-            transportError(`message exceeds ${MCP_STDIO_MAX_MESSAGE_BYTES} bytes and was discarded.`),
+            transportError(
+              `message exceeds ${MCP_STDIO_MAX_MESSAGE_BYTES} bytes and was discarded.`,
+            ),
           );
         } else {
           segment.copy(this.#line, this.#length);
