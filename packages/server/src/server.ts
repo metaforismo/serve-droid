@@ -270,6 +270,7 @@ export class ServeDroidServer {
     });
     this.#http.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#videoWebSocket.on("connection", (socket) => {
+      socket.on("error", () => undefined);
       let unregister: (() => void) | undefined;
       socket.on("message", (message, binary) => {
         if (binary) return;
@@ -287,6 +288,7 @@ export class ServeDroidServer {
       socket.once("close", () => unregister?.());
     });
     this.#controlWebSocket.on("connection", (socket) => {
+      socket.on("error", () => undefined);
       socket.on("message", (message) => {
         const value = Buffer.isBuffer(message)
           ? message.toString("utf8")
@@ -295,6 +297,7 @@ export class ServeDroidServer {
       });
     });
     this.#audioWebSocket.on("connection", (socket) => {
+      socket.on("error", () => undefined);
       socket.send(
         JSON.stringify({ schemaVersion: SCHEMA_VERSION, type: "audio-state", ...this.#audioState }),
       );
