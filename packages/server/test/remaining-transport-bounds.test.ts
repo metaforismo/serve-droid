@@ -155,9 +155,9 @@ describe("WebSocket payload and client bounds", () => {
     const url = await server();
     const socket = await connect(url, "/api/v1/video");
 
-    await expect(closeCodeAfterSend(socket, Buffer.alloc(DECODED_FRAME_MAX_PAYLOAD + 1))).resolves.toBe(
-      1009,
-    );
+    await expect(
+      closeCodeAfterSend(socket, Buffer.alloc(DECODED_FRAME_MAX_PAYLOAD + 1)),
+    ).resolves.toBe(1009);
   });
 
   it("rejects a video connection before upgrade when the configured client limit is full", async () => {
