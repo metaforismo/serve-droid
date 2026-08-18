@@ -249,6 +249,42 @@ describe("MCP contracts", () => {
     expect(state.stopped.value).toBe(true);
   });
 
+  it("emits standard progress notifications for requested install and push operations", async () => {
+    const state = fixture();
+    const client = await connectedClient(state.runtime);
+    const installProgress: unknown[] = [];
+    const pushProgress: unknown[] = [];
+
+    const installed = await client.callTool(
+      {
+        name: "android_manage_app",
+        arguments: { operation: "install", path: "/tmp/example.apk" },
+      },
+      undefined,
+      { onprogress: (progress) => installProgress.push(progress) },
+    );
+    expect(installed.isError).not.toBe(true);
+
+    const pushed = await client.callTool(
+      {
+        name: "android_push_file",
+        arguments: { localPath: "/tmp/example.txt" },
+      },
+      undefined,
+      { onprogress: (progress) => pushProgress.push(progress) },
+    );
+    expect(pushed.isError).not.toBe(true);
+
+    expect(installProgress).toEqual([
+      { progress: 1, total: 2, message: "Installing APK on Android." },
+      { progress: 2, total: 2, message: "Install complete." },
+    ]);
+    expect(pushProgress).toEqual([
+      { progress: 1, total: 2, message: "Pushing file to Android." },
+      { progress: 2, total: 2, message: "Push complete." },
+    ]);
+  });
+
   it("uses the ADB screenshot path when no browser session is active", async () => {
     const state = fixture();
     const client = await connectedClient(state.runtime);

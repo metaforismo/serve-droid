@@ -7,7 +7,7 @@ describe("incremental SSE parser", () => {
     const parser = createSseParser((event) => events.push(event));
 
     parser.push("event: progress\r\ndata: first");
-    parser.push("\r\ndata: second\r\n\r\nevent: result\ndata: {\"ok\":true}\n\n");
+    parser.push('\r\ndata: second\r\n\r\nevent: result\ndata: {"ok":true}\n\n');
 
     expect(events).toEqual([
       { event: "progress", data: "first\nsecond" },
