@@ -15,7 +15,7 @@ import {
   type RunResult,
 } from "../../core/src/index.js";
 import { assertPortAvailable } from "../src/listen.js";
-import { canSendAudio, encodeAudioPacket, ServeDroidServer } from "../src/server.js";
+import { canSendAudio, canSendVideo, encodeAudioPacket, ServeDroidServer } from "../src/server.js";
 import {
   RestartingVideoSource,
   SCRCPY_SERVER_SHA256,
@@ -384,6 +384,14 @@ describe("audio wire format", () => {
     expect(canSendAudio(512 * 1024 - 1)).toBe(true);
     expect(canSendAudio(512 * 1024)).toBe(false);
     expect(canSendAudio(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+
+  it("bounds video socket backpressure", () => {
+    expect(canSendVideo(0)).toBe(true);
+    expect(canSendVideo(4 * 1024 * 1024 - 1)).toBe(true);
+    expect(canSendVideo(4 * 1024 * 1024)).toBe(false);
+    expect(canSendVideo(Number.NaN)).toBe(false);
+    expect(canSendVideo(Number.POSITIVE_INFINITY)).toBe(false);
   });
 });
 

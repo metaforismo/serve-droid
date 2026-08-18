@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { BoundedStdioServerTransport } from "./bounded-stdio.js";
 import {
   AdbClient,
   AndroidService,
@@ -421,5 +421,5 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
 
 export async function runMcpServer(): Promise<void> {
   const server = createMcpServer();
-  await server.connect(new StdioServerTransport());
+  await server.connect(new BoundedStdioServerTransport());
 }
