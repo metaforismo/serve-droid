@@ -40,14 +40,14 @@ function stableId(path: string, node: XmlNode): string {
 }
 
 function tagEnd(xml: string, start: number): number {
-  let quote: "\"" | "'" | null = null;
+  let quote: '"' | "'" | null = null;
   for (let index = start + 1; index < xml.length; index += 1) {
     const value = xml[index];
     if (quote) {
       if (value === quote) quote = null;
       continue;
     }
-    if (value === "\"" || value === "'") {
+    if (value === '"' || value === "'") {
       quote = value;
       continue;
     }
