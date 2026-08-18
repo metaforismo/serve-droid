@@ -1,5 +1,5 @@
 import { PassThrough, Writable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { BoundedStdioServerTransport, MCP_STDIO_MAX_MESSAGE_BYTES } from "../src/bounded-stdio.js";
 
 const notification = '{"jsonrpc":"2.0","method":"notifications/initialized"}\n';
