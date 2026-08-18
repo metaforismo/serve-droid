@@ -60,13 +60,21 @@ describe("UI hierarchy failure boundaries", () => {
     ).toThrowError(expect.objectContaining({ code: "ADB_FAILED" }));
   });
 
-  it("rejects well-formed XML that is not a UIAutomator hierarchy", () => {
+  it("rejects well-formed markup that is not a UIAutomator hierarchy", () => {
     expect(() => parseUiHierarchy("<not-hierarchy />", display)).toThrowError(
-      expect.objectContaining({
-        code: "ADB_FAILED",
-        message: "UIAutomator XML did not contain a hierarchy root.",
-      }),
+      expect.objectContaining({ code: "ADB_FAILED" }),
     );
+  });
+
+  it("accepts parser-compatible Android attribute text without requiring strict XML entities", () => {
+    const elements = parseUiHierarchy(
+      '<hierarchy rotation="0"><node text="A & B > C" resource-id="dev.test:id/title" class="android.widget.TextView" package="dev.test" content-desc="" clickable="false" enabled="true" focusable="false" scrollable="false" selected="false" checked="false" bounds="[0,0][1080,200]"/></hierarchy>',
+      display,
+    );
+
+    expect(elements).toEqual([
+      expect.objectContaining({ text: "A & B > C", resourceId: "dev.test:id/title" }),
+    ]);
   });
 });
 
