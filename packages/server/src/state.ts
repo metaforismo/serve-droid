@@ -68,10 +68,7 @@ function storedSession(value: unknown): SessionInfo | null {
   } catch {
     return null;
   }
-  if (
-    session.recordingDirectory !== undefined &&
-    typeof session.recordingDirectory !== "string"
-  ) {
+  if (session.recordingDirectory !== undefined && typeof session.recordingDirectory !== "string") {
     return null;
   }
   return session as unknown as SessionInfo;
@@ -82,13 +79,13 @@ function matchesPersistedIdentity(value: unknown, session: SessionInfo): boolean
   const device = record(live?.device);
   return Boolean(
     live &&
-      device &&
-      live.schemaVersion === session.schemaVersion &&
-      live.pid === session.pid &&
-      live.port === session.port &&
-      live.url === session.url &&
-      live.startedAt === session.startedAt &&
-      device.serial === session.device.serial,
+    device &&
+    live.schemaVersion === session.schemaVersion &&
+    live.pid === session.pid &&
+    live.port === session.port &&
+    live.url === session.url &&
+    live.startedAt === session.startedAt &&
+    device.serial === session.device.serial,
   );
 }
 
@@ -123,9 +120,7 @@ export async function verifySessionState(
   }
 }
 
-export async function readSessionStates(
-  fetcher: typeof fetch = fetch,
-): Promise<SessionInfo[]> {
+export async function readSessionStates(fetcher: typeof fetch = fetch): Promise<SessionInfo[]> {
   let names: string[];
   try {
     names = await readdir(stateDirectory());
