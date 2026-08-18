@@ -1,0 +1,59 @@
+name: Temporary remaining transport docs
+
+on:
+  push:
+    branches:
+      - hardening/remaining-transport-bounds
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/remaining-transport-bounds
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@10.28.0
+      - run: pnpm install --frozen-lockfile
+      - name: Update bounded transport documentation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          mcp = Path("docs/mcp.md")
+          text = mcp.read_text()
+          old = """Run `serve-droid mcp` over stdio. Tools are bounded and explicit:\n"""
+          new = """Run `serve-droid mcp` over newline-delimited JSON-RPC stdio. Each inbound message is capped at\n1 MiB before the MCP SDK parser. A malformed line is reported as a transport error without being\njoined to the next message; an oversized line is discarded through its newline and the transport\nthen resumes. Outbound writes honor Node stream backpressure and wait for `drain` instead of\naccumulating an application-side output queue. Tools are bounded and explicit:\n"""
+          if old not in text:
+              raise SystemExit("MCP intro not found")
+          mcp.write_text(text.replace(old, new, 1))
+
+          protocol = Path("docs/protocol.md")
+          text = protocol.read_text()
+          old = """Decoded-frame screenshots are an opt-in extension to the video socket. A capable browser sends\n`{\"schemaVersion\":1,\"type\":\"decoded-frame-provider\"}` after the socket opens. Only a socket that\nsent that declaration is eligible to receive a `capture-decoded-frame` text request or return a\n`decoded-frame` response. Video clients that do not opt in preserve the original binary-only H.264\noutput contract.\n"""
+          new = old + """\nAccepted WebSocket connections contain protocol/transport `error` events so parser-level failures\nsuch as an oversized frame cannot escape as an uncaught server exception. The control socket uses\nthe bounded JSON action payload limit, audio accepts at most 256 KiB inbound messages, and the video\nsocket uses the decoded-frame payload limit. Outbound video is skipped for a client at 4 MiB of\nbuffered data; outbound audio is skipped at 512 KiB. Decoded-frame providers at 256 KiB of buffered\ndata are not selected for new capture work, malformed provider JSON is ignored without consuming a\nlater valid response, and the configured video-client count is enforced before upgrade. These are\nbounded-memory/fail-closed contracts, not lossless-delivery guarantees.\n"""
+          if old not in text:
+              raise SystemExit("decoded-frame paragraph not found")
+          protocol.write_text(text.replace(old, new, 1))
+
+          todo = Path("docs/TODO.md")
+          text = todo.read_text()
+          old = "- [ ] Audit remaining video, audio, decoded-frame, and MCP malformed-input/backpressure boundaries."
+          new = """- [x] Bound MCP stdio input/output and recover after malformed or oversized message lines.\n- [x] Bound video, audio, and decoded-frame WebSocket payload, buffering, provider/client pressure,\n      and accepted-socket protocol errors."""
+          if old not in text:
+              raise SystemExit("remaining transport TODO not found")
+          todo.write_text(text.replace(old, new, 1))
+          PY
+          pnpm exec prettier --write docs/mcp.md docs/protocol.md docs/TODO.md
+          rm .github/workflows/temporary-remaining-transport-docs.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/mcp.md docs/protocol.md docs/TODO.md .github/workflows/temporary-remaining-transport-docs.yml
+          git diff --cached --quiet || git commit -m "Document remaining transport bounds"
+          git push origin HEAD:hardening/remaining-transport-bounds
