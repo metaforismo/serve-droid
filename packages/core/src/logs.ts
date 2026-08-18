@@ -93,6 +93,7 @@ export class LogBuffer extends EventEmitter {
   #cursor = 0;
   #process: ChildProcessWithoutNullStreams | undefined;
   #partial = "";
+  #discardingOversizedLine = false;
 
   public constructor(limit = 5_000) {
     super();
@@ -112,6 +113,8 @@ export class LogBuffer extends EventEmitter {
   public stop(): void {
     this.#process?.kill();
     this.#process = undefined;
+    this.#partial = "";
+    this.#discardingOversizedLine = false;
   }
 
   public read(since = "0", pid?: number): { entries: LogEntry[]; nextCursor: string } {
@@ -124,16 +127,31 @@ export class LogBuffer extends EventEmitter {
     };
   }
 
+  #appendLine(rawLine: string): void {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    const entry = parseLogLine(line, ++this.#cursor);
+    if (!entry) return;
+    this.#entries.push(entry);
+    if (this.#entries.length > this.#limit)
+      this.#entries.splice(0, this.#entries.length - this.#limit);
+    this.emit("entry", entry);
+  }
+
   #consume(chunk: string): void {
-    const lines = `${this.#partial}${chunk}`.split(/\r?\n/u);
+    const lines = `${this.#partial}${chunk}`.split("\n");
     this.#partial = lines.pop() ?? "";
-    for (const line of lines) {
-      const entry = parseLogLine(line, ++this.#cursor);
-      if (!entry) continue;
-      this.#entries.push(entry);
-      if (this.#entries.length > this.#limit)
-        this.#entries.splice(0, this.#entries.length - this.#limit);
-      this.emit("entry", entry);
+
+    if (this.#discardingOversizedLine && lines.length > 0) {
+      this.#cursor += 1;
+      lines.shift();
+      this.#discardingOversizedLine = false;
+    }
+
+    for (const line of lines) this.#appendLine(line);
+
+    if (this.#partial.length > MAX_LOG_LINE_LENGTH) {
+      this.#partial = "";
+      this.#discardingOversizedLine = true;
     }
   }
 }
