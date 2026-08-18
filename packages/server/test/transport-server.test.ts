@@ -26,6 +26,8 @@ class FakeAdb implements AdbRunner {
   public readonly calls: string[][] = [];
   public readonly logcat = new FakeProcess();
   public failInstall = false;
+  public installBarrier: Promise<void> | undefined;
+  public onInstall: (() => void) | undefined;
 
   public async run(args: readonly string[]): Promise<RunResult> {
     this.calls.push([...args]);
@@ -33,8 +35,10 @@ class FakeAdb implements AdbRunner {
     if (command === "shell wm size") return ok("Physical size: 1080x1920\n");
     if (command === "shell wm density") return ok("Physical density: 420\n");
     if (command === "shell dumpsys input") return ok("SurfaceOrientation: 0\n");
-    if (this.failInstall && command.startsWith("install -r ")) {
-      return { stdout: "", stderr: "install failed", exitCode: 1 };
+    if (command.startsWith("install -r ")) {
+      this.onInstall?.();
+      await this.installBarrier;
+      if (this.failInstall) return { stdout: "", stderr: "install failed", exitCode: 1 };
     }
     return ok("");
   }
@@ -189,6 +193,39 @@ describe("file operation progress", () => {
 
     expect(adb.calls.some((call) => call[0] === "install" && call[1] === "-r")).toBe(true);
     expect(adb.calls.some((call) => call[0] === "push")).toBe(true);
+  });
+
+  it("flushes the active Android phase before adb install completes", async () => {
+    const { adb, url } = await startServer();
+    let releaseInstall!: () => void;
+    adb.installBarrier = new Promise<void>((resolve) => {
+      releaseInstall = resolve;
+    });
+    const installStarted = new Promise<void>((resolve) => {
+      adb.onInstall = resolve;
+    });
+
+    const response = await fetch(`${url}/api/v1/files`, {
+      method: "POST",
+      headers: uploadHeaders("slow.apk"),
+      body: Buffer.from("apk"),
+    });
+    await installStarted;
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    const firstText = new TextDecoder().decode(first.value);
+    expect(firstText).toContain('"operation":"install","phase":"installing"');
+    expect(firstText).not.toContain('"phase":"completed"');
+
+    releaseInstall();
+    let rest = "";
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      rest += new TextDecoder().decode(chunk.value);
+    }
+    expect(rest).toContain('"operation":"install","phase":"completed"');
+    expect(rest).toContain("event: result");
   });
 
   it("streams a typed failure after progress has already started", async () => {

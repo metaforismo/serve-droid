@@ -31,6 +31,7 @@ import {
 } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
 import { probeBrowser } from "./browser-probe.js";
+import { cliProgressEvent, writeCliProgress } from "./progress.js";
 
 interface GlobalOptions {
   device?: string;
@@ -688,7 +689,13 @@ program.command("rotate <orientation>").action(async (orientation, _local, comma
 const app = program.command("app").description("Manage Android apps.");
 app.command("install <apk>").action(async (apk, _local, command) => {
   const options = globalOptions(command);
-  await (await service(options)).actions.install(resolve(apk));
+  const current = await service(options);
+  writeCliProgress(
+    options,
+    cliProgressEvent("install", "installing", 1, "Installing APK on Android."),
+  );
+  await current.actions.install(resolve(apk));
+  writeCliProgress(options, cliProgressEvent("install", "completed", 2, "Install complete."));
   output({ schemaVersion: SCHEMA_VERSION, ok: true }, options, "Installed.");
 });
 app
@@ -747,7 +754,10 @@ program
   .command("push <local-file> [remote-directory]")
   .action(async (path, remote, _local, command) => {
     const options = globalOptions(command);
-    const destination = await (await service(options)).actions.push(resolve(path), remote);
+    const current = await service(options);
+    writeCliProgress(options, cliProgressEvent("push", "pushing", 1, "Pushing file to Android."));
+    const destination = await current.actions.push(resolve(path), remote);
+    writeCliProgress(options, cliProgressEvent("push", "completed", 2, "Push complete."));
     output({ schemaVersion: SCHEMA_VERSION, destination }, options, destination);
   });
 
