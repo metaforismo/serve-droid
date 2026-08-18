@@ -56,10 +56,7 @@ async function flushStreams(): Promise<void> {
 describe("UI hierarchy failure boundaries", () => {
   it("rejects structurally malformed XML instead of accepting a partial hierarchy", () => {
     expect(() =>
-      parseUiHierarchy(
-        '<?xml version="1.0"?><hierarchy><node text="broken"></hierarchy>',
-        display,
-      ),
+      parseUiHierarchy('<?xml version="1.0"?><hierarchy><node text="broken"></hierarchy>', display),
     ).toThrowError(expect.objectContaining({ code: "ADB_FAILED" }));
   });
 
