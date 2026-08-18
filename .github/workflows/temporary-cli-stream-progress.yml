@@ -1,0 +1,73 @@
+name: Temporary CLI and streaming progress integration
+
+on:
+  push:
+    branches:
+      - feature/install-push-progress
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/install-push-progress
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@10.28.0
+      - run: pnpm install --frozen-lockfile
+      - name: Integrate CLI progress and streaming proof
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          cli = Path("packages/cli/src/index.ts")
+          text = cli.read_text()
+          anchor = 'import { probeBrowser } from "./browser-probe.js";\n'
+          if anchor not in text:
+              raise SystemExit("CLI import anchor not found")
+          text = text.replace(anchor, anchor + 'import { cliProgressEvent, writeCliProgress } from "./progress.js";\n', 1)
+
+          old = '''app.command("install <apk>").action(async (apk, _local, command) => {\n  const options = globalOptions(command);\n  await (await service(options)).actions.install(resolve(apk));\n  output({ schemaVersion: SCHEMA_VERSION, ok: true }, options, "Installed.");\n});\n'''
+          new = '''app.command("install <apk>").action(async (apk, _local, command) => {\n  const options = globalOptions(command);\n  const current = await service(options);\n  writeCliProgress(\n    options,\n    cliProgressEvent("install", "installing", 1, "Installing APK on Android."),\n  );\n  await current.actions.install(resolve(apk));\n  writeCliProgress(options, cliProgressEvent("install", "completed", 2, "Install complete."));\n  output({ schemaVersion: SCHEMA_VERSION, ok: true }, options, "Installed.");\n});\n'''
+          if old not in text:
+              raise SystemExit("CLI install command not found")
+          text = text.replace(old, new, 1)
+
+          old = '''program\n  .command("push <local-file> [remote-directory]")\n  .action(async (path, remote, _local, command) => {\n    const options = globalOptions(command);\n    const destination = await (await service(options)).actions.push(resolve(path), remote);\n    output({ schemaVersion: SCHEMA_VERSION, destination }, options, destination);\n  });\n'''
+          new = '''program\n  .command("push <local-file> [remote-directory]")\n  .action(async (path, remote, _local, command) => {\n    const options = globalOptions(command);\n    const current = await service(options);\n    writeCliProgress(options, cliProgressEvent("push", "pushing", 1, "Pushing file to Android."));\n    const destination = await current.actions.push(resolve(path), remote);\n    writeCliProgress(options, cliProgressEvent("push", "completed", 2, "Push complete."));\n    output({ schemaVersion: SCHEMA_VERSION, destination }, options, destination);\n  });\n'''
+          if old not in text:
+              raise SystemExit("CLI push command not found")
+          cli.write_text(text.replace(old, new, 1))
+
+          test = Path("packages/server/test/transport-server.test.ts")
+          text = test.read_text()
+          old = '''  public readonly logcat = new FakeProcess();\n  public failInstall = false;\n\n  public async run(args: readonly string[]): Promise<RunResult> {\n'''
+          new = '''  public readonly logcat = new FakeProcess();\n  public failInstall = false;\n  public installBarrier: Promise<void> | undefined;\n  public onInstall: (() => void) | undefined;\n\n  public async run(args: readonly string[]): Promise<RunResult> {\n'''
+          if old not in text:
+              raise SystemExit("FakeAdb fields anchor not found")
+          text = text.replace(old, new, 1)
+          old = '''    if (this.failInstall && command.startsWith("install -r ")) {\n      return { stdout: "", stderr: "install failed", exitCode: 1 };\n    }\n    return ok("");\n'''
+          new = '''    if (command.startsWith("install -r ")) {\n      this.onInstall?.();\n      await this.installBarrier;\n      if (this.failInstall) return { stdout: "", stderr: "install failed", exitCode: 1 };\n    }\n    return ok("");\n'''
+          if old not in text:
+              raise SystemExit("FakeAdb install behavior anchor not found")
+          text = text.replace(old, new, 1)
+
+          anchor = '''  it("streams a typed failure after progress has already started", async () => {\n'''
+          block = '''  it("flushes the active Android phase before adb install completes", async () => {\n    const { adb, url } = await startServer();\n    let releaseInstall!: () => void;\n    adb.installBarrier = new Promise<void>((resolve) => {\n      releaseInstall = resolve;\n    });\n    const installStarted = new Promise<void>((resolve) => {\n      adb.onInstall = resolve;\n    });\n\n    const response = await fetch(`${url}/api/v1/files`, {\n      method: "POST",\n      headers: uploadHeaders("slow.apk"),\n      body: Buffer.from("apk"),\n    });\n    await installStarted;\n    const reader = response.body!.getReader();\n    const first = await reader.read();\n    const firstText = new TextDecoder().decode(first.value);\n    expect(firstText).toContain('"operation":"install","phase":"installing"');\n    expect(firstText).not.toContain('"phase":"completed"');\n\n    releaseInstall();\n    let rest = "";\n    while (true) {\n      const chunk = await reader.read();\n      if (chunk.done) break;\n      rest += new TextDecoder().decode(chunk.value);\n    }\n    expect(rest).toContain('"operation":"install","phase":"completed"');\n    expect(rest).toContain("event: result");\n  });\n\n'''
+          if anchor not in text:
+              raise SystemExit("streaming test insertion anchor not found")
+          test.write_text(text.replace(anchor, block + anchor, 1))
+          PY
+          pnpm exec prettier --write packages/cli/src/index.ts packages/cli/src/progress.ts packages/cli/test/progress.test.ts packages/server/test/transport-server.test.ts
+          rm .github/workflows/temporary-cli-stream-progress.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/cli/src/index.ts packages/cli/src/progress.ts packages/cli/test/progress.test.ts packages/server/test/transport-server.test.ts .github/workflows/temporary-cli-stream-progress.yml
+          git diff --cached --quiet || git commit -m "Integrate CLI and streamed file progress"
+          git push origin HEAD:feature/install-push-progress
