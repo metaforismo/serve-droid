@@ -1,0 +1,32 @@
+name: Temporary remaining transport test formatter
+
+on:
+  push:
+    branches:
+      - hardening/remaining-transport-bounds
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: hardening/remaining-transport-bounds
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Install pinned package manager
+        run: npm install --global pnpm@10.28.0
+      - run: pnpm install --frozen-lockfile
+      - name: Format and remove temporary workflow
+        run: |
+          pnpm exec prettier --write packages/server/test/remaining-transport-bounds.test.ts
+          rm .github/workflows/temporary-remaining-test-format.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/server/test/remaining-transport-bounds.test.ts .github/workflows/temporary-remaining-test-format.yml
+          git diff --cached --quiet || git commit -m "Format remaining transport bounds test"
+          git push origin HEAD:hardening/remaining-transport-bounds
