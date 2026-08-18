@@ -102,19 +102,22 @@ export class LogBuffer extends EventEmitter {
 
   public start(adb: AdbRunner, serial: string): void {
     if (this.#process) return;
-    this.#process = adb.spawn(["logcat", "-v", "threadtime"], { serial });
-    this.#process.stdout.setEncoding("utf8").on("data", (chunk: string) => this.#consume(chunk));
-    this.#process.once("close", () => {
+    const process = adb.spawn(["logcat", "-v", "threadtime"], { serial });
+    this.#process = process;
+    process.stdout.setEncoding("utf8").on("data", (chunk: string) => this.#consume(chunk));
+    process.once("close", () => {
+      if (this.#process !== process) return;
       this.#process = undefined;
+      this.#resetPartialLine();
       this.emit("close");
     });
   }
 
   public stop(): void {
-    this.#process?.kill();
+    const process = this.#process;
     this.#process = undefined;
-    this.#partial = "";
-    this.#discardingOversizedLine = false;
+    this.#resetPartialLine();
+    process?.kill();
   }
 
   public read(since = "0", pid?: number): { entries: LogEntry[]; nextCursor: string } {
@@ -125,6 +128,11 @@ export class LogBuffer extends EventEmitter {
       ),
       nextCursor: String(this.#cursor),
     };
+  }
+
+  #resetPartialLine(): void {
+    this.#partial = "";
+    this.#discardingOversizedLine = false;
   }
 
   #appendLine(rawLine: string): void {
