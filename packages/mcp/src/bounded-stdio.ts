@@ -61,15 +61,16 @@ export class BoundedStdioServerTransport {
 
   readonly #onError = (error: Error): void => this.onerror?.(error);
 
-  public async start(): Promise<void> {
-    if (this.#started) throw transportError("transport was already started.");
+  public start(): Promise<void> {
+    if (this.#started) return Promise.reject(transportError("transport was already started."));
     this.#started = true;
     this.input.on("data", this.#onData);
     this.input.on("error", this.#onError);
+    return Promise.resolve();
   }
 
-  public async close(): Promise<void> {
-    if (!this.#started) return;
+  public close(): Promise<void> {
+    if (!this.#started) return Promise.resolve();
     this.#started = false;
     this.input.off("data", this.#onData);
     this.input.off("error", this.#onError);
@@ -77,6 +78,7 @@ export class BoundedStdioServerTransport {
     this.#discardingOversizedLine = false;
     if (this.input.listenerCount("data") === 0) this.input.pause();
     this.onclose?.();
+    return Promise.resolve();
   }
 
   public async send(message: JSONRPCMessage): Promise<void> {
