@@ -169,7 +169,9 @@ describe("file operation progress", () => {
     const install = await installResponse.text();
     expect(install).toContain('"operation":"install","phase":"installing"');
     expect(install).toContain('"operation":"install","phase":"completed"');
-    expect(install).toContain('event: result\ndata: {"schemaVersion":1,"ok":true,"operation":"install"}');
+    expect(install).toContain(
+      'event: result\ndata: {"schemaVersion":1,"ok":true,"operation":"install"}',
+    );
     expect(install.indexOf('"phase":"installing"')).toBeLessThan(
       install.indexOf('"phase":"completed"'),
     );
