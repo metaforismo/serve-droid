@@ -121,7 +121,10 @@ because its code path compiles.
 - [x] Add a dedicated element-targeting MCP action that never falls back to guessed coordinates.
 - [x] Contract-test every MCP tool with an in-memory transport.
 - [ ] Add progress events for installs and pushes.
-- [ ] Test backpressure and malformed input across every public transport.
+- [x] Reject malformed or non-object JSON consistently across authenticated HTTP and control
+      WebSocket actions, and reject malformed upload-name encoding before file or ADB work.
+- [x] Bound slow Logcat SSE clients and expose resumable event cursors.
+- [ ] Audit remaining video, audio, decoded-frame, and MCP malformed-input/backpressure boundaries.
 
 ## Fixture and platform acceptance
 
