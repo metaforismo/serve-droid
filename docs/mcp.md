@@ -14,6 +14,12 @@ accumulating an application-side output queue. Tools are bounded and explicit:
 `android_observe` returns one JPEG image plus compact JSON metadata. It never emits raw XML or an
 unbounded Logcat dump. Destructive app operations require `confirm: true`.
 
+When an MCP caller includes a progress token, `android_manage_app` with `operation: "install"` and
+`android_push_file` emit standard `notifications/progress` messages. Step `1/2` means the Android
+install or push is active and `2/2` means it completed. These are monotonic operation steps, not a
+percentage estimate. Callers that do not request progress receive no extra notifications, and the
+normal tool result or error remains authoritative.
+
 Prefer `android_tap_element` after observation. Its `selector` must contain exactly one exact
 `id`, `resourceId`, `text`, or `contentDescription` value. The tool taps the center of the uniquely
 matched normalized bounds. Missing matches return `ELEMENT_NOT_FOUND`; multiple matches return
