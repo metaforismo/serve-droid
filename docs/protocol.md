@@ -24,6 +24,15 @@ sent that declaration is eligible to receive a `capture-decoded-frame` text requ
 `decoded-frame` response. Video clients that do not opt in preserve the original binary-only H.264
 output contract.
 
+Accepted WebSocket connections contain protocol/transport `error` events so parser-level failures
+such as an oversized frame cannot escape as an uncaught server exception. The control socket uses
+the bounded JSON action payload limit, audio accepts at most 256 KiB inbound messages, and the video
+socket uses the decoded-frame payload limit. Outbound video is skipped for a client at 4 MiB of
+buffered data; outbound audio is skipped at 512 KiB. Decoded-frame providers at 256 KiB of buffered
+data are not selected for new capture work, malformed provider JSON is ignored without consuming a
+later valid response, and the configured video-client count is enforced before upgrade. These are
+bounded-memory/fail-closed contracts, not lossless-delivery guarantees.
+
 Uploads use `application/octet-stream` with `X-File-Name`. APKs install; other files are pushed to
 `/sdcard/Download`. The limit is 256 MiB. Malformed URI encoding or NUL-containing file names fail
 as `INVALID_ARGUMENT` before a temporary file or ADB operation is created. Browser clients report

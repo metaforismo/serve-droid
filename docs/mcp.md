@@ -1,6 +1,10 @@
 # MCP integration
 
-Run `serve-droid mcp` over stdio. Tools are bounded and explicit:
+Run `serve-droid mcp` over newline-delimited JSON-RPC stdio. Each inbound message is capped at
+1 MiB before the MCP SDK parser. A malformed line is reported as a transport error without being
+joined to the next message; an oversized line is discarded through its newline and the transport
+then resumes. Outbound writes honor Node stream backpressure and wait for `drain` instead of
+accumulating an application-side output queue. Tools are bounded and explicit:
 
 - `android_list_devices`, `android_start_session`, `android_stop_session`
 - `android_observe`, `android_tap`, `android_tap_element`, `android_swipe`, `android_type_text`,

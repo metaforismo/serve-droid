@@ -124,7 +124,9 @@ because its code path compiles.
 - [x] Reject malformed or non-object JSON consistently across authenticated HTTP and control
       WebSocket actions, and reject malformed upload-name encoding before file or ADB work.
 - [x] Bound slow Logcat SSE clients and expose resumable event cursors.
-- [ ] Audit remaining video, audio, decoded-frame, and MCP malformed-input/backpressure boundaries.
+- [x] Bound MCP stdio input/output and recover after malformed or oversized message lines.
+- [x] Bound video, audio, and decoded-frame WebSocket payload, buffering, provider/client pressure,
+      and accepted-socket protocol errors.
 
 ## Fixture and platform acceptance
 
