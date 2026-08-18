@@ -46,7 +46,9 @@ function hasTappableBounds(element: UiElement): boolean {
 
 async function tapElement(service: AndroidService, element: UiElement): Promise<void> {
   if (!hasTappableBounds(element)) {
-    throw new Error(`Element '${element.resourceId || element.text}' has no tappable visible bounds.`);
+    throw new Error(
+      `Element '${element.resourceId || element.text}' has no tappable visible bounds.`,
+    );
   }
   await service.actions.tap(
     (element.bounds.left + element.bounds.right) / 2,
@@ -74,9 +76,13 @@ async function findTappableElement(
     if (element && hasTappableBounds(element)) return element;
     if (attempt === maxScrolls) break;
 
-    const scrollable = elements.find((candidate) => candidate.scrollable && hasTappableBounds(candidate));
+    const scrollable = elements.find(
+      (candidate) => candidate.scrollable && hasTappableBounds(candidate),
+    );
     if (!scrollable) {
-      throw new Error("The requested fixture element is not visible and no semantic scroll container exists.");
+      throw new Error(
+        "The requested fixture element is not visible and no semantic scroll container exists.",
+      );
     }
     const height = scrollable.bounds.bottom - scrollable.bounds.top;
     const x = (scrollable.bounds.left + scrollable.bounds.right) / 2;
@@ -88,7 +94,9 @@ async function findTappableElement(
       350,
     );
   }
-  throw new Error("The requested fixture element did not become tappable after bounded semantic scrolling.");
+  throw new Error(
+    "The requested fixture element did not become tappable after bounded semantic scrolling.",
+  );
 }
 
 describe.skipIf(!enabled)("real Android device", () => {
@@ -159,7 +167,8 @@ describe.skipIf(!enabled)("real Android device", () => {
                 entry.message.includes("Intentional fixture crash requested"),
             ) &&
             entries.some(
-              (entry) => entry.tag === "AndroidRuntime" && entry.message.includes("FATAL EXCEPTION"),
+              (entry) =>
+                entry.tag === "AndroidRuntime" && entry.message.includes("FATAL EXCEPTION"),
             ),
           "the intentional crash evidence in Logcat",
           10_000,
