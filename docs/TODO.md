@@ -137,7 +137,7 @@ because its code path compiles.
 - [x] Diagnose an occupied fixed port before any device startup work.
 - [x] Test browser control reconnect after a forced WebSocket failure.
 - [x] Reject malformed UIAutomator XML and bound fragmented, oversized, or unterminated Logcat input.
-- [ ] Reject stale persisted session state before selection or shutdown.
+- [x] Reject stale persisted session state before selection or shutdown.
 - [ ] Verify one emulator and one USB device on macOS.
 - [ ] Verify one emulator and one USB device on Linux.
 - [ ] Verify one emulator and one USB device on Windows.
