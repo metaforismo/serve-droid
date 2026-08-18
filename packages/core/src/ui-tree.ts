@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { XMLParser } from "fast-xml-parser";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 import { ServeDroidError } from "./errors.js";
 import type { DisplayInfo, UiElement } from "./types.js";
 
@@ -40,6 +40,13 @@ function stableId(path: string, node: XmlNode): string {
 }
 
 export function parseUiHierarchy(xml: string, display: DisplayInfo): UiElement[] {
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) {
+    throw new ServeDroidError("ADB_FAILED", "UIAutomator returned malformed XML.", {
+      validation,
+    });
+  }
+
   let document: { hierarchy?: XmlNode };
   try {
     document = parser.parse(xml) as { hierarchy?: XmlNode };
@@ -49,7 +56,9 @@ export function parseUiHierarchy(xml: string, display: DisplayInfo): UiElement[]
     });
   }
   const root = document.hierarchy;
-  if (!root) return [];
+  if (!root) {
+    throw new ServeDroidError("ADB_FAILED", "UIAutomator XML did not contain a hierarchy root.");
+  }
   const output: UiElement[] = [];
   const visit = (node: XmlNode, path: string, parentId: string | null): void => {
     const id = stableId(path, node);
