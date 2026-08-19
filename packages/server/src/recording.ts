@@ -111,6 +111,20 @@ export async function removeRecording(directory: string): Promise<void> {
   await rm(target, { recursive: true, force: false });
 }
 
+export function validateRecordingOptions(
+  options: Pick<RecordingOptions, "maxBytes" | "maxDurationMs">,
+): void {
+  if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1024 * 1024) {
+    throw new ServeDroidError("INVALID_ARGUMENT", "Recording maxBytes must be at least 1 MiB.");
+  }
+  if (!Number.isSafeInteger(options.maxDurationMs) || options.maxDurationMs < 1_000) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "Recording maxDurationMs must be at least 1 second.",
+    );
+  }
+}
+
 export class SessionRecorder {
   readonly #manifest: RecordingManifest;
   readonly #video: FileHandle;
@@ -141,15 +155,7 @@ export class SessionRecorder {
   }
 
   public static async create(options: RecordingOptions): Promise<SessionRecorder> {
-    if (!Number.isSafeInteger(options.maxBytes) || options.maxBytes < 1024 * 1024) {
-      throw new ServeDroidError("INVALID_ARGUMENT", "Recording maxBytes must be at least 1 MiB.");
-    }
-    if (!Number.isSafeInteger(options.maxDurationMs) || options.maxDurationMs < 1_000) {
-      throw new ServeDroidError(
-        "INVALID_ARGUMENT",
-        "Recording maxDurationMs must be at least 1 second.",
-      );
-    }
+    validateRecordingOptions(options);
     const root = resolve(options.directory);
     await mkdir(root, { recursive: true, mode: 0o700 });
     await recoverPartialRecordings(root);

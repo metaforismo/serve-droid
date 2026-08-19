@@ -156,7 +156,8 @@ because its code path compiles.
 - [x] Opt-in raw H.264 and privacy-filtered JSONL session recording.
 - [x] Enforce recording byte/time limits with explicit verified cleanup.
 - [x] Recover partial manifests only when their owning process is dead.
-- [ ] Rich trace export and browser recording controls.
+- [x] Add host-authorized browser recording start/stop controls without exposing host path selection.
+- [ ] Rich trace export.
 - [x] Expiring foreground named tunnels with explicit consent, revocation, and visible state.
 - [ ] Multi-user collaboration roles.
 - [x] Discover installed AVDs independently and provide explicit start/stop lifecycle controls.

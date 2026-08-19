@@ -130,7 +130,9 @@ gestures are left untouched.
 
 Session capture is explicit and bounded. `--record ./recordings` stores the original H.264 stream
 plus privacy-filtered event summaries; it never records tokens, Logcat, typed text, URLs, or file
-contents. See the [recording and retention guide](docs/recording.md).
+contents. Use `--record-controls ./recordings` instead to authorize browser start/stop without
+recording immediately; the cockpit never chooses a host path or limit. See the
+[recording and retention guide](docs/recording.md).
 
 ## MCP
 

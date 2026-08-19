@@ -29,7 +29,12 @@ import {
   sseResumeCursor,
   writeSseLogFrame,
 } from "./transport-boundaries.js";
-import { SessionRecorder, type RecordingOptions, type RecordingStatus } from "./recording.js";
+import {
+  SessionRecorder,
+  validateRecordingOptions,
+  type RecordingOptions,
+  type RecordingStatus,
+} from "./recording.js";
 import type { TunnelStatus } from "./tunnel.js";
 import { listenHttpServer } from "./listen.js";
 import {
@@ -60,6 +65,7 @@ export interface ServerOptions {
   webRoot?: string;
   videoSource?: VideoSource;
   recording?: Omit<RecordingOptions, "serial">;
+  recordingControl?: Omit<RecordingOptions, "serial">;
   audio?: boolean;
   frameAncestor?: string;
   maxVideoClients?: number;
@@ -187,6 +193,8 @@ export class ServeDroidServer {
   readonly #frameAncestor: string | undefined;
   readonly #maxVideoClients: number;
   readonly #recordingOptions: Omit<RecordingOptions, "serial"> | undefined;
+  readonly #recordingAutoStart: boolean;
+  #recordingMutation: Promise<void> = Promise.resolve();
   #recorder: SessionRecorder | undefined;
   #session: SessionInfo | undefined;
   #audioState: AudioState;
@@ -215,7 +223,15 @@ export class ServeDroidServer {
     ) {
       throw new ServeDroidError("INVALID_ARGUMENT", "maxVideoClients must be between 1 and 8.");
     }
-    this.#recordingOptions = options.recording;
+    if (options.recording && options.recordingControl) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Choose either recording auto-start or recording controls, not both.",
+      );
+    }
+    this.#recordingOptions = options.recording ?? options.recordingControl;
+    this.#recordingAutoStart = Boolean(options.recording);
+    if (this.#recordingOptions) validateRecordingOptions(this.#recordingOptions);
     this.#http = createServer((request, response) => void this.#handle(request, response));
     this.#videoWebSocket = new WebSocketServer({
       noServer: true,
@@ -319,6 +335,73 @@ export class ServeDroidServer {
     return this.#recorder?.status ?? null;
   }
 
+  public get recordingControllable(): boolean {
+    return Boolean(this.#recordingOptions);
+  }
+
+  async #setBrowserRecording(body: Record<string, unknown>): Promise<{
+    schemaVersion: 1;
+    controllable: true;
+    recording: RecordingStatus | null;
+  }> {
+    if (this.#stopping) {
+      throw new ServeDroidError("TRANSPORT_FAILED", "The session is stopping.");
+    }
+    if (!this.#recordingOptions) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Browser recording controls were not authorized by the host process.",
+      );
+    }
+    if (Object.keys(body).some((key) => key !== "active") || typeof body.active !== "boolean") {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Recording control requires exactly one boolean active field.",
+      );
+    }
+    if (!this.#session) {
+      throw new ServeDroidError("SESSION_NOT_FOUND", "No active serve-droid session exists.");
+    }
+
+    const active = body.active;
+    const operation = this.#recordingMutation.then(async () => {
+      if (active) {
+        if (this.#recorder?.status.active) return this.#recorder.status;
+        await this.#recorder?.stop();
+        const recorder = await SessionRecorder.create({
+          ...this.#recordingOptions!,
+          serial: this.service.device.serial,
+        });
+        this.#recorder = recorder;
+        recorder.recordEvent("recording-start", {
+          trigger: "browser",
+          serial: this.service.device.serial,
+          width: this.#session!.display.width,
+          height: this.#session!.display.height,
+        });
+        this.#session!.recordingDirectory = recorder.status.directory;
+        await writeSessionState(this.#session!);
+        return recorder.status;
+      }
+
+      if (!this.#recorder) return null;
+      if (this.#recorder.status.active) {
+        this.#recorder.recordEvent("recording-stop", { trigger: "browser" });
+      }
+      await this.#recorder.stop();
+      return this.#recorder.status;
+    });
+    this.#recordingMutation = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      controllable: true,
+      recording: await operation,
+    };
+  }
+
   public async captureAgentScreenshot(
     options: AgentScreenshotOptions = {},
   ): Promise<AgentScreenshot> {
@@ -380,7 +463,7 @@ export class ServeDroidServer {
       startedAt: new Date().toISOString(),
     };
     try {
-      if (this.#recordingOptions) {
+      if (this.#recordingAutoStart && this.#recordingOptions) {
         this.#recorder = await SessionRecorder.create({
           ...this.#recordingOptions,
           serial: this.service.device.serial,
@@ -410,6 +493,7 @@ export class ServeDroidServer {
   public async stop(): Promise<void> {
     if (this.#stopping) return;
     this.#stopping = true;
+    await this.#recordingMutation;
     this.#decodedFrames.close();
     await this.#video.stop();
     this.#recorder?.recordEvent("session-stop");
@@ -506,8 +590,11 @@ export class ServeDroidServer {
       } else if (url.pathname === "/api/v1/recording" && request.method === "GET") {
         json(response, 200, {
           schemaVersion: SCHEMA_VERSION,
+          controllable: this.recordingControllable,
           recording: this.recording,
         });
+      } else if (url.pathname === "/api/v1/recording" && request.method === "POST") {
+        json(response, 200, await this.#setBrowserRecording(await readJson(request)));
       } else if (url.pathname === "/api/v1/remote-access" && request.method === "GET") {
         json(response, 200, { schemaVersion: SCHEMA_VERSION, ...this.#remoteAccess });
       } else if (url.pathname === "/api/v1/remote-access" && request.method === "POST") {

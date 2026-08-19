@@ -271,6 +271,10 @@ program
   .option("--token <token>", "fixed bearer token")
   .option("--record <directory>", "opt in to bounded H.264 and redacted event recording")
   .option(
+    "--record-controls <directory>",
+    "authorize browser recording start/stop inside this host directory without auto-starting",
+  )
+  .option(
     "--record-max-mb <megabytes>",
     "maximum recording size",
     (value) => Number.parseInt(value, 10),
@@ -287,6 +291,12 @@ program
   .option("--child", "internal detached child mode")
   .action(async (device, local, command) => {
     const options = { ...globalOptions(command), device: device ?? globalOptions(command).device };
+    if (local.record && local.recordControls) {
+      throw new ServeDroidError(
+        "INVALID_ARGUMENT",
+        "Choose either --record or --record-controls, not both.",
+      );
+    }
     await assertPortAvailable(local.host, local.port);
     if (local.detach && !local.child) {
       const args = [
@@ -301,10 +311,11 @@ program
         "--json",
       ];
       if (local.token) args.push("--token", local.token);
-      if (local.record) {
+      const detachedRecordingDirectory = local.record ?? local.recordControls;
+      if (detachedRecordingDirectory) {
         args.push(
-          "--record",
-          resolve(local.record),
+          local.record ? "--record" : "--record-controls",
+          resolve(detachedRecordingDirectory),
           "--record-max-mb",
           String(local.recordMaxMb),
           "--record-max-minutes",
@@ -345,10 +356,10 @@ program
       host: local.host,
       port: local.port,
       token: local.token,
-      ...(local.record
+      ...(local.record || local.recordControls
         ? {
-            recording: {
-              directory: resolve(local.record),
+            [local.record ? "recording" : "recordingControl"]: {
+              directory: resolve(local.record ?? local.recordControls),
               maxBytes: Number(local.recordMaxMb) * 1024 * 1024,
               maxDurationMs: Number(local.recordMaxMinutes) * 60_000,
             },
@@ -358,9 +369,14 @@ program
     });
     const session = await server.start();
     output(
-      { ...session, token: undefined, recording: server.recording },
+      {
+        ...session,
+        token: undefined,
+        recording: server.recording,
+        recordingControllable: server.recordingControllable,
+      },
       options,
-      `serve-droid: ${session.url}\nDevice: ${session.device.model ?? session.device.serial}\nToken: ${server.token}${server.recording ? `\nRecording: ${server.recording.directory}` : ""}`,
+      `serve-droid: ${session.url}\nDevice: ${session.device.model ?? session.device.serial}\nToken: ${server.token}${server.recording ? `\nRecording: ${server.recording.directory}` : local.recordControls ? `\nRecording controls: ${resolve(local.recordControls)}` : ""}`,
     );
     const stop = () => void server.stop().finally(() => process.exit());
     process.on("SIGINT", stop);

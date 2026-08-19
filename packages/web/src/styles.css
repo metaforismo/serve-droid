@@ -191,6 +191,11 @@ footer {
   color: #ffd77c;
   background: #2a2211;
 }
+.recording-badge {
+  border-color: #773b3b;
+  color: #ffaaaa;
+  background: #311919;
+}
 .status {
   color: #c7ff4a;
   display: flex;
