@@ -1,5 +1,6 @@
 export * from "./server.js";
 export * from "./recording.js";
+export * from "./trace.js";
 export * from "./state.js";
 export * from "./video.js";
 export * from "./control.js";

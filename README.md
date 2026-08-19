@@ -132,7 +132,8 @@ Session capture is explicit and bounded. `--record ./recordings` stores the orig
 plus privacy-filtered event summaries; it never records tokens, Logcat, typed text, URLs, or file
 contents. Use `--record-controls ./recordings` instead to authorize browser start/stop without
 recording immediately; the cockpit never chooses a host path or limit. See the
-[recording and retention guide](docs/recording.md).
+[recording and retention guide](docs/recording.md). Finalized recordings can also be exported
+with `serve-droid recording trace` for timeline inspection in Perfetto.
 
 ## MCP
 

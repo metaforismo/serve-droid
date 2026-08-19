@@ -137,6 +137,8 @@ export class SessionRecorder {
   #finalized = false;
   #reason: RecordingStopReason = "active";
   #bytesWritten = 0;
+  #eventSequence = 0;
+  readonly #startedMonotonic = process.hrtime.bigint();
 
   private constructor(
     private readonly options: RecordingOptions,
@@ -212,8 +214,17 @@ export class SessionRecorder {
 
   public recordEvent(type: string, details: Record<string, unknown> = {}): void {
     if (!this.#active) return;
+    const monotonicUs = Number((process.hrtime.bigint() - this.#startedMonotonic) / 1000n);
+    const sequence = this.#eventSequence++;
     const line = Buffer.from(
-      `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, timestamp: new Date().toISOString(), type, details })}\n`,
+      `${JSON.stringify({
+        schemaVersion: SCHEMA_VERSION,
+        timestamp: new Date().toISOString(),
+        monotonicUs,
+        sequence,
+        type,
+        details,
+      })}\n`,
     );
     this.#enqueue(this.#events, line);
   }

@@ -13,7 +13,9 @@ not upload recordings or delete them automatically.
 
 - `video.h264`: the original H.264 Annex-B stream from scrcpy. The host does not decode or
   re-encode it.
-- `events.jsonl`: bounded lifecycle and control-event summaries.
+- `events.jsonl`: bounded lifecycle and control-event summaries. New events include a monotonic
+  microsecond timestamp and sequence number in addition to wall-clock time, so export ordering does
+  not depend on wall-clock adjustments.
 - `manifest.json`: schema version, device serial, limits, timestamps, byte count, and final status.
 
 Events intentionally exclude bearer tokens, Logcat, screenshots, clipboard data, typed text, deep
@@ -48,6 +50,25 @@ recognized serve-droid manifest and refuses a recording owned by a live process:
 ```sh
 serve-droid recording remove ./recordings/session-emulator-5554-... --yes
 ```
+
+## Trace export
+
+A finalized or recovered recording can be exported without decoding the H.264 video:
+
+```sh
+serve-droid recording trace ./recordings/session-emulator-5554-... -o session.trace.json
+```
+
+The output is streaming Chrome Trace Event JSON that can be opened in Perfetto. Lifecycle, input,
+device, capture, and transport events are placed on separate tracks. The exporter reuses only the
+privacy-filtered metadata already present in `events.jsonl`; it does not add Logcat, tokens, typed
+text, deep-link URLs, local/remote file paths, or file contents. New recordings use their monotonic
+timestamps; older recordings fall back to relative wall-clock timestamps.
+
+Trace export refuses active/unrecovered recordings and existing output files, caps each source event
+line at 64 KiB, streams the input instead of loading the entire recording into memory, and deletes a
+partially written trace if validation fails. A recovered crash may end with an incomplete final JSONL
+fragment; only that final unterminated fragment is dropped and its byte count is reported.
 
 ## Crash recovery
 
