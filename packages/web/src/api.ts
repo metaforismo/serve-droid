@@ -55,6 +55,23 @@ export interface RemoteAccess {
   expiresAt: string | null;
 }
 
+export interface RecordingStatus {
+  schemaVersion: 1;
+  active: boolean;
+  directory: string;
+  startedAt: string;
+  bytesWritten: number;
+  maxBytes: number;
+  maxDurationMs: number;
+  reason: "active" | "completed" | "size-limit" | "time-limit";
+}
+
+export interface RecordingState {
+  schemaVersion: 1;
+  controllable: boolean;
+  recording: RecordingStatus | null;
+}
+
 export async function screenshot(url: string): Promise<Blob> {
   const response = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`Screenshot request failed (${response.status})`);

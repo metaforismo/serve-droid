@@ -21,6 +21,21 @@ link URLs, local and remote file paths, and file contents. Text actions retain o
 count. A recording can still contain sensitive pixels rendered by the device; review it before
 sharing.
 
+## Browser controls
+
+Recording controls are disabled unless the host explicitly authorizes a directory. To allow the
+browser cockpit to start and stop recordings without recording immediately:
+
+```sh
+serve-droid start --record-controls ./recordings --record-max-mb 1024 --record-max-minutes 60
+```
+
+The browser can only toggle recording inside the host-selected root and limits. It cannot supply a
+path, byte limit, or duration. `--record` still starts recording immediately and also makes the same
+start/stop control available for later recordings in that root. Anyone holding a valid session
+token can use an authorized browser control, so do not enable it for a session whose authenticated
+viewers should not be allowed to capture device pixels.
+
 ## Limits and retention
 
 The byte limit applies to the combined H.264 and event streams. A complete chunk that would exceed

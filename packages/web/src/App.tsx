@@ -29,6 +29,7 @@ import {
   upload,
   type LogEntry,
   type Observation,
+  type RecordingState,
   type RemoteAccess,
   type UiElement,
   type UploadProgress,
@@ -146,6 +147,7 @@ function Cockpit() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [audioStatus, setAudioStatus] = useState("Audio muted");
   const [remoteAccess, setRemoteAccess] = useState<RemoteAccess | null>(null);
+  const [recordingState, setRecordingState] = useState<RecordingState | null>(null);
   const [clipboardOpen, setClipboardOpen] = useState(false);
   const [clipboardText, setClipboardText] = useState("");
   const [clipboardStatus, setClipboardStatus] = useState("Paste text into the focused field");
@@ -158,12 +160,14 @@ function Cockpit() {
 
   const refresh = useCallback(async () => {
     try {
-      const [result, remote] = await Promise.all([
+      const [result, remote, recording] = await Promise.all([
         api<Observation>(`/api/v1/observe?logsSince=${observation?.nextLogCursor ?? "0"}`),
         api<RemoteAccess>("/api/v1/remote-access"),
+        api<RecordingState>("/api/v1/recording").catch(() => null),
       ]);
       setObservation(result);
       setRemoteAccess(remote);
+      setRecordingState(recording);
       setLogs((previous) => {
         const byCursor = new Map(previous.map((entry) => [entry.cursor, entry]));
         for (const entry of result.logs) byCursor.set(entry.cursor, entry);
@@ -382,6 +386,22 @@ function Cockpit() {
     }
   };
 
+  const toggleRecording = async () => {
+    if (!recordingState?.controllable) return;
+    const active = !recordingState.recording?.active;
+    try {
+      setError("");
+      const next = await api<RecordingState>("/api/v1/recording", {
+        method: "POST",
+        body: JSON.stringify({ active }),
+      });
+      setRecordingState(next);
+      setStatus(active ? "Recording started" : "Recording saved");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
   const pasteToDevice = async () => {
     if (!clipboardText) return;
     if (/[^\u0020-\u007e]/u.test(clipboardText)) {
@@ -566,6 +586,11 @@ function Cockpit() {
               Remote access · expires {new Date(remoteAccess.expiresAt!).toLocaleTimeString()}
             </span>
           )}
+          {recordingState?.recording?.active && (
+            <span className="demo-badge recording-badge" role="status">
+              Recording
+            </span>
+          )}
           <span>
             {observation?.device.model ?? observation?.device.serial ?? "Waiting for device"}
           </span>
@@ -731,6 +756,25 @@ function Cockpit() {
                 )}
                 <span>Audio</span>
               </button>
+              {recordingState?.controllable && (
+                <button
+                  title={recordingState.recording?.active ? "Stop recording" : "Start recording"}
+                  aria-label={
+                    recordingState.recording?.active
+                      ? "Stop session recording"
+                      : "Start session recording"
+                  }
+                  aria-pressed={Boolean(recordingState.recording?.active)}
+                  onClick={() => void toggleRecording()}
+                >
+                  {recordingState.recording?.active ? (
+                    <Pause aria-hidden="true" />
+                  ) : (
+                    <Play aria-hidden="true" />
+                  )}
+                  <span>{recordingState.recording?.active ? "Stop rec" : "Record"}</span>
+                </button>
+              )}
               <button
                 title="Paste text"
                 aria-label="Open device clipboard"

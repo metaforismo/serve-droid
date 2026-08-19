@@ -5,7 +5,7 @@ All responses include `schemaVersion: 1`. Every endpoint except `GET /api/v1/hea
 
 - `GET /api/v1/devices`, `/session`, `/observe`, `/tree`, `/screenshot`
 - `GET /api/v1/logs` uses Server-Sent Events.
-- `GET /api/v1/recording` returns the bounded local recorder status or `null`.
+- `GET /api/v1/recording` returns recorder status plus whether host-authorized browser controls are available. `POST /api/v1/recording` accepts exactly `{ "active": boolean }` and cannot set host paths or limits.
 - `GET /api/v1/video` upgrades to a binary H.264 WebSocket. Clients that explicitly opt into the
   decoded-frame extension may additionally exchange the bounded JSON messages described below.
 - `GET /api/v1/control` upgrades to a JSON action WebSocket.
