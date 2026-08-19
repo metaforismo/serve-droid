@@ -40,6 +40,13 @@ import {
   isDecodedFrameProviderHello,
   jpegDimensions,
 } from "./decoded-frame.js";
+import {
+  acceptsFileProgressStream,
+  fileProgressEvent,
+  startFileProgressStream,
+  writeFileProgressFrame,
+  type FileOperation,
+} from "./file-progress.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -525,7 +532,7 @@ export class ServeDroidServer {
       } else if (url.pathname === "/api/v1/permissions" && request.method === "POST") {
         json(response, 200, await this.#permission(await readJson(request)));
       } else if (url.pathname === "/api/v1/files" && request.method === "POST") {
-        json(response, 200, await this.#file(request));
+        await this.#file(request, response);
       } else {
         json(response, 404, {
           schemaVersion: SCHEMA_VERSION,
@@ -750,20 +757,65 @@ export class ServeDroidServer {
     return { schemaVersion: SCHEMA_VERSION, ok: true, output };
   }
 
-  async #file(request: IncomingMessage): Promise<unknown> {
+  async #file(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const name = decodeUploadName(String(request.headers["x-file-name"] ?? ""));
     const directory = await mkdtemp(join(tmpdir(), "serve-droid-upload-"));
     const path = join(directory, name);
     try {
       await writeFile(path, await readBody(request, FILE_LIMIT), { flag: "wx", mode: 0o600 });
-      if (name.toLocaleLowerCase().endsWith(".apk")) {
-        await this.service.actions.install(path);
-        this.#recorder?.recordEvent("file", { operation: "install-apk" });
-        return { schemaVersion: SCHEMA_VERSION, ok: true, operation: "install" };
+      const operation: FileOperation = name.toLocaleLowerCase().endsWith(".apk")
+        ? "install"
+        : "push";
+      const execute = async (): Promise<unknown> => {
+        if (operation === "install") {
+          await this.service.actions.install(path);
+          this.#recorder?.recordEvent("file", { operation: "install-apk" });
+          return { schemaVersion: SCHEMA_VERSION, ok: true, operation };
+        }
+        const destination = await this.service.actions.push(path);
+        this.#recorder?.recordEvent("file", { operation: "push" });
+        return { schemaVersion: SCHEMA_VERSION, ok: true, operation, destination };
+      };
+
+      if (!acceptsFileProgressStream(request.headers.accept)) {
+        json(response, 200, await execute());
+        return;
       }
-      const destination = await this.service.actions.push(path);
-      this.#recorder?.recordEvent("file", { operation: "push" });
-      return { schemaVersion: SCHEMA_VERSION, ok: true, operation: "push", destination };
+
+      startFileProgressStream(response);
+      const activePhase = operation === "install" ? "installing" : "pushing";
+      writeFileProgressFrame(
+        response,
+        "progress",
+        fileProgressEvent(
+          operation,
+          activePhase,
+          operation === "install" ? "Installing APK on Android." : "Pushing file to Android.",
+        ),
+      );
+      try {
+        const result = await execute();
+        writeFileProgressFrame(
+          response,
+          "progress",
+          fileProgressEvent(
+            operation,
+            "completed",
+            operation === "install" ? "Install complete." : "Push complete.",
+          ),
+        );
+        writeFileProgressFrame(response, "result", result);
+      } catch (error) {
+        const envelope = errorBody(error);
+        writeFileProgressFrame(
+          response,
+          "progress",
+          fileProgressEvent(operation, "failed", envelope.error.message),
+        );
+        writeFileProgressFrame(response, "error", envelope);
+      } finally {
+        response.end();
+      }
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

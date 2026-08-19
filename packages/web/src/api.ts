@@ -1,3 +1,5 @@
+import { createSseParser } from "./sse.js";
+
 const fragment = new URLSearchParams(location.hash.replace(/^#/u, ""));
 const token = window.__SERVE_DROID__?.token || fragment.get("token") || "";
 if (fragment.has("token")) history.replaceState(null, "", `${location.pathname}${location.search}`);
@@ -78,7 +80,7 @@ export async function action(body: Record<string, unknown>): Promise<void> {
 }
 
 export interface UploadProgress {
-  phase: "uploading" | "processing";
+  phase: "uploading" | "processing" | "installing" | "pushing";
   loaded: number;
   total: number;
   percent: number;
@@ -91,15 +93,64 @@ export interface UploadResult {
   destination?: string;
 }
 
+interface FileProgressEvent {
+  schemaVersion: 1;
+  type: "file-progress";
+  operation: "install" | "push";
+  phase: "installing" | "pushing" | "completed" | "failed";
+  message: string;
+}
+
+interface ErrorEnvelope {
+  error?: { message?: string };
+}
+
 export function upload(
   file: File,
   onProgress: (progress: UploadProgress) => void = () => undefined,
 ): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
+    let responseOffset = 0;
+    let result: UploadResult | undefined;
+    let streamError: Error | undefined;
+    let parseError: Error | undefined;
+    const parser = createSseParser((event) => {
+      try {
+        if (event.event === "progress") {
+          const progress = JSON.parse(event.data) as FileProgressEvent;
+          if (
+            progress.type === "file-progress" &&
+            (progress.phase === "installing" || progress.phase === "pushing")
+          ) {
+            onProgress({
+              phase: progress.phase,
+              loaded: file.size,
+              total: file.size,
+              percent: 100,
+            });
+          }
+        } else if (event.event === "result") {
+          result = JSON.parse(event.data) as UploadResult;
+        } else if (event.event === "error") {
+          const body = JSON.parse(event.data) as ErrorEnvelope;
+          streamError = new Error(body.error?.message ?? "Android file operation failed.");
+        }
+      } catch {
+        parseError = new Error("Upload progress stream contained invalid JSON.");
+      }
+    });
+
+    const consumeResponse = () => {
+      const chunk = request.responseText.slice(responseOffset);
+      responseOffset = request.responseText.length;
+      if (chunk) parser.push(chunk);
+    };
+
     request.open("POST", "/api/v1/files");
     request.setRequestHeader("authorization", `Bearer ${token}`);
     request.setRequestHeader("content-type", "application/octet-stream");
+    request.setRequestHeader("accept", "text/event-stream");
     request.setRequestHeader("x-file-name", encodeURIComponent(file.name));
     request.upload.addEventListener("progress", (event) => {
       const total = event.lengthComputable && event.total > 0 ? event.total : file.size;
@@ -114,19 +165,42 @@ export function upload(
     request.upload.addEventListener("load", () => {
       onProgress({ phase: "processing", loaded: file.size, total: file.size, percent: 100 });
     });
+    request.addEventListener("progress", consumeResponse);
     request.addEventListener("load", () => {
-      let body: UploadResult & { error?: { message: string } };
-      try {
-        body = JSON.parse(request.responseText) as typeof body;
-      } catch {
-        reject(new Error(`Upload returned an invalid response (${request.status})`));
+      consumeResponse();
+      parser.finish();
+      if (parseError) {
+        reject(parseError);
         return;
       }
       if (request.status < 200 || request.status >= 300) {
+        let body: ErrorEnvelope = {};
+        try {
+          body = JSON.parse(request.responseText) as ErrorEnvelope;
+        } catch {
+          // The status code remains the useful fallback when the pre-stream response is not JSON.
+        }
         reject(new Error(body.error?.message ?? `Upload failed (${request.status})`));
         return;
       }
-      resolve(body);
+      if (streamError) {
+        reject(streamError);
+        return;
+      }
+      if (result) {
+        resolve(result);
+        return;
+      }
+      try {
+        const body = JSON.parse(request.responseText) as UploadResult;
+        if (body.ok === true && (body.operation === "install" || body.operation === "push")) {
+          resolve(body);
+          return;
+        }
+      } catch {
+        // A current server should have returned an SSE result event.
+      }
+      reject(new Error(`Upload returned an invalid response (${request.status})`));
     });
     request.addEventListener("error", () => reject(new Error("Upload connection failed.")));
     request.addEventListener("abort", () => reject(new Error("Upload was cancelled.")));

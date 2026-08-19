@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { BoundedStdioServerTransport } from "./bounded-stdio.js";
+import { reportMcpProgress } from "./progress.js";
 import {
   AdbClient,
   AndroidService,
@@ -324,13 +325,19 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
         confirm: z.boolean().default(false),
       }),
     },
-    async ({ device, operation, packageName = "", path = "", activity, url = "", confirm }) => {
+    async (
+      { device, operation, packageName = "", path = "", activity, url = "", confirm },
+      extra,
+    ) => {
       const actions = (await selectedService(device)).current.actions;
       if ((operation === "clear" || operation === "uninstall") && !confirm) {
         throw new Error(`${operation} requires confirm=true.`);
       }
-      if (operation === "install") await actions.install(path);
-      else if (operation === "launch") await actions.launch(packageName, activity);
+      if (operation === "install") {
+        await reportMcpProgress(extra, 1, 2, "Installing APK on Android.");
+        await actions.install(path);
+        await reportMcpProgress(extra, 2, 2, "Install complete.");
+      } else if (operation === "launch") await actions.launch(packageName, activity);
       else if (operation === "stop") await actions.stop(packageName);
       else if (operation === "clear") await actions.clear(packageName);
       else if (operation === "uninstall") await actions.uninstall(packageName);
@@ -375,13 +382,14 @@ export function createMcpServer(runtime: McpRuntime = defaultRuntime()) {
         remoteDirectory: z.string().default("/sdcard/Download/"),
       }),
     },
-    async ({ device, localPath, remoteDirectory }) =>
-      text({
-        schemaVersion: 1,
-        destination: await (
-          await selectedService(device)
-        ).current.actions.push(localPath, remoteDirectory),
-      }),
+    async ({ device, localPath, remoteDirectory }, extra) => {
+      await reportMcpProgress(extra, 1, 2, "Pushing file to Android.");
+      const destination = await (
+        await selectedService(device)
+      ).current.actions.push(localPath, remoteDirectory);
+      await reportMcpProgress(extra, 2, 2, "Push complete.");
+      return text({ schemaVersion: 1, destination });
+    },
   );
 
   mcp.registerTool(

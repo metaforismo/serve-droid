@@ -120,7 +120,7 @@ because its code path compiles.
 - [x] Ship an Agent Skill with observe-act-verify, deep-link, failure, and cleanup rules.
 - [x] Add a dedicated element-targeting MCP action that never falls back to guessed coordinates.
 - [x] Contract-test every MCP tool with an in-memory transport.
-- [ ] Add progress events for installs and pushes.
+- [x] Add progress events for installs and pushes across CLI, streamed HTTP/browser uploads, and MCP.
 - [x] Reject malformed or non-object JSON consistently across authenticated HTTP and control
       WebSocket actions, and reject malformed upload-name encoding before file or ADB work.
 - [x] Bound slow Logcat SSE clients and expose resumable event cursors.

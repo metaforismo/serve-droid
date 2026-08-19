@@ -41,6 +41,18 @@ while waiting for ADB. The server does not invent a percentage for Android-side 
 responses identify the `install` or `push` operation and include the remote destination for pushed
 files.
 
+`POST /api/v1/files` keeps that JSON response as its default contract. A client may opt into
+Android-side progress by sending `Accept: text/event-stream`. After the complete upload body has
+been received and bounded, the server starts an SSE response and emits `event: progress` envelopes
+with `type: "file-progress"`, the `install` or `push` operation, and an active `installing` or
+`pushing` phase. It later emits terminal `completed` or `failed` progress, followed by exactly one
+`event: result` containing the existing success envelope or `event: error` containing the normal
+typed error envelope. Because headers have already been sent when an Android action later fails,
+that streamed failure remains HTTP 200 and the error event is authoritative. Tests block ADB install
+and verify that the active phase is readable before the Android command completes. CLI `app install`
+and `push` mirror the active/completed steps on stderr; `--json` therefore keeps the final
+machine-readable result on stdout.
+
 Rotation actions complete only after the device reports the requested logical orientation. If
 display metadata does not settle within five seconds, the action fails instead of allowing a later
 normalized coordinate action to use stale dimensions.
