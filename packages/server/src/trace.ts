@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { open, readFile, rm, stat } from "node:fs/promises";
+import { lstat, open, readFile, rm, stat } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { SCHEMA_VERSION, ServeDroidError } from "@serve-droid/core";
@@ -15,7 +15,7 @@ interface TraceRecordingManifest {
   pid: number;
   serial: string;
   startedAt: string;
-  endedAt: string | null;
+  endedAt: string;
   status: FinalRecordingStatus;
   bytesWritten: number;
   maxBytes: number;
@@ -49,6 +49,7 @@ export interface RecordingTraceExport {
   output: string;
   eventCount: number;
   droppedTrailingBytes: number;
+  adjustedWallClockEvents: number;
   recordingStatus: FinalRecordingStatus;
 }
 
@@ -64,8 +65,12 @@ function invalid(message: string): ServeDroidError {
   return new ServeDroidError("INVALID_ARGUMENT", message);
 }
 
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
 async function readSmallJson(path: string): Promise<unknown> {
-  const info = await stat(path);
+  const info = await lstat(path);
   if (!info.isFile() || info.size > MAX_MANIFEST_BYTES) {
     throw invalid("Recording manifest is not a bounded regular file.");
   }
@@ -90,8 +95,20 @@ function validateManifest(value: unknown): TraceRecordingManifest {
   }
   if (
     value.schemaVersion !== SCHEMA_VERSION ||
+    !Number.isSafeInteger(value.pid) ||
+    Number(value.pid) <= 0 ||
     typeof value.serial !== "string" ||
-    !Number.isFinite(Date.parse(String(value.startedAt))) ||
+    value.serial.length === 0 ||
+    typeof value.startedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.startedAt)) ||
+    typeof value.endedAt !== "string" ||
+    !Number.isFinite(Date.parse(value.endedAt)) ||
+    !isNonNegativeSafeInteger(value.bytesWritten) ||
+    !Number.isSafeInteger(value.maxBytes) ||
+    Number(value.maxBytes) < 1024 * 1024 ||
+    Number(value.bytesWritten) > Number(value.maxBytes) ||
+    !Number.isSafeInteger(value.maxDurationMs) ||
+    Number(value.maxDurationMs) < 1_000 ||
     !isRecord(value.video) ||
     value.video.path !== "video.h264" ||
     value.video.codec !== "h264-annex-b" ||
@@ -116,7 +133,7 @@ async function loadFinalManifest(directory: string): Promise<TraceRecordingManif
     }
   }
   try {
-    const partial = await stat(join(directory, "manifest.partial.json"));
+    const partial = await lstat(join(directory, "manifest.partial.json"));
     if (partial.isFile()) {
       throw invalid("Recording is still active or unrecovered; stop or recover it first.");
     }
@@ -134,6 +151,8 @@ function parseRecordedEvent(line: Buffer): RecordedEvent {
   } catch {
     throw invalid("Recording event stream contains malformed JSON.");
   }
+  const hasMonotonic = isRecord(value) && value.monotonicUs !== undefined;
+  const hasSequence = isRecord(value) && value.sequence !== undefined;
   if (
     !isRecord(value) ||
     value.schemaVersion !== SCHEMA_VERSION ||
@@ -143,10 +162,9 @@ function parseRecordedEvent(line: Buffer): RecordedEvent {
     value.type.length === 0 ||
     value.type.length > 128 ||
     !isRecord(value.details) ||
-    (value.monotonicUs !== undefined &&
-      (!Number.isSafeInteger(value.monotonicUs) || Number(value.monotonicUs) < 0)) ||
-    (value.sequence !== undefined &&
-      (!Number.isSafeInteger(value.sequence) || Number(value.sequence) < 0))
+    hasMonotonic !== hasSequence ||
+    (hasMonotonic && !isNonNegativeSafeInteger(value.monotonicUs)) ||
+    (hasSequence && !isNonNegativeSafeInteger(value.sequence))
   ) {
     throw invalid("Recording event stream contains an invalid event envelope.");
   }
@@ -184,8 +202,8 @@ function sourceTimestampUs(
   timestampUs: number;
   timingSource: "monotonic" | "wall-clock";
 } {
-  if (Number.isSafeInteger(event.monotonicUs) && Number(event.monotonicUs) >= 0) {
-    return { timestampUs: Number(event.monotonicUs), timingSource: "monotonic" };
+  if (isNonNegativeSafeInteger(event.monotonicUs)) {
+    return { timestampUs: event.monotonicUs, timingSource: "monotonic" };
   }
   return {
     timestampUs: Math.max(0, Math.round((Date.parse(event.timestamp) - startedAtMs) * 1000)),
@@ -229,15 +247,27 @@ export async function exportRecordingTrace(
 ): Promise<RecordingTraceExport> {
   const directory = resolve(recordingDirectory);
   const manifest = await loadFinalManifest(directory);
-  const eventsPath = join(directory, "events.jsonl");
+  const eventsPath = join(directory, manifest.events.path);
+  const videoPath = join(directory, manifest.video.path);
   let eventInfo;
+  let videoInfo;
   try {
-    eventInfo = await stat(eventsPath);
+    [eventInfo, videoInfo] = await Promise.all([lstat(eventsPath), lstat(videoPath)]);
   } catch (error) {
-    if (nodeCode(error) === "ENOENT") throw invalid("Recording events.jsonl is missing.");
+    if (nodeCode(error) === "ENOENT") throw invalid("Recording stream file is missing.");
     throw error;
   }
-  if (!eventInfo.isFile()) throw invalid("Recording events.jsonl is not a regular file.");
+  if (!eventInfo.isFile() || !videoInfo.isFile()) {
+    throw invalid("Recording stream files must be regular files.");
+  }
+  const observedBytesWritten = eventInfo.size + videoInfo.size;
+  if (
+    !Number.isSafeInteger(observedBytesWritten) ||
+    observedBytesWritten < 0 ||
+    observedBytesWritten > manifest.maxBytes
+  ) {
+    throw invalid("Recording stream files exceed the declared byte limit.");
+  }
 
   const target = resolve(outputPath);
   try {
@@ -281,7 +311,8 @@ export async function exportRecordingTrace(
           status: manifest.status,
           startedAt: manifest.startedAt,
           endedAt: manifest.endedAt,
-          bytesWritten: manifest.bytesWritten,
+          bytesWritten: observedBytesWritten,
+          manifestBytesWritten: manifest.bytesWritten,
           maxBytes: manifest.maxBytes,
           maxDurationMs: manifest.maxDurationMs,
           videoCodec: manifest.video.codec,
@@ -297,6 +328,8 @@ export async function exportRecordingTrace(
     let buffered = Buffer.alloc(0);
     let eventCount = 0;
     let lastTimestampUs = 0;
+    let lastMonotonicSequence: number | undefined;
+    let adjustedWallClockEvents = 0;
     let droppedTrailingBytes = 0;
 
     const consume = async (line: Buffer): Promise<void> => {
@@ -307,7 +340,26 @@ export async function exportRecordingTrace(
       const normalized = line.at(-1) === 0x0d ? line.subarray(0, -1) : line;
       const event = parseRecordedEvent(normalized);
       const timing = sourceTimestampUs(event, startedAtMs);
-      lastTimestampUs = Math.max(lastTimestampUs, timing.timestampUs);
+      let timestampUs = timing.timestampUs;
+      let timingAdjusted = false;
+
+      if (timing.timingSource === "monotonic") {
+        if (eventCount > 0 && timestampUs < lastTimestampUs) {
+          throw invalid("Recording monotonic timestamps are not ordered.");
+        }
+        if (
+          lastMonotonicSequence !== undefined &&
+          Number(event.sequence) <= lastMonotonicSequence
+        ) {
+          throw invalid("Recording event sequence is not strictly increasing.");
+        }
+        lastMonotonicSequence = Number(event.sequence);
+      } else if (timestampUs < lastTimestampUs) {
+        timingAdjusted = true;
+        adjustedWallClockEvents += 1;
+        timestampUs = lastTimestampUs;
+      }
+
       const placement = track(event.type);
       await writeTraceEvent(
         output!,
@@ -316,7 +368,7 @@ export async function exportRecordingTrace(
           cat: placement.category,
           ph: "i",
           s: "t",
-          ts: timing.timestampUs,
+          ts: timestampUs,
           pid: TRACE_PID,
           tid: placement.tid,
           args: {
@@ -324,10 +376,14 @@ export async function exportRecordingTrace(
             eventTimestamp: event.timestamp,
             eventSequence: event.sequence ?? eventCount,
             timingSource: timing.timingSource,
+            ...(timingAdjusted
+              ? { timingAdjusted: true, sourceTimestampUs: timing.timestampUs }
+              : {}),
           },
         },
         writeState,
       );
+      lastTimestampUs = timestampUs;
       eventCount += 1;
     };
 
@@ -359,7 +415,7 @@ export async function exportRecordingTrace(
         ts: lastTimestampUs,
         pid: TRACE_PID,
         tid: 1,
-        args: { sourceEventCount: eventCount, droppedTrailingBytes },
+        args: { sourceEventCount: eventCount, droppedTrailingBytes, adjustedWallClockEvents },
       },
       writeState,
     );
@@ -372,6 +428,7 @@ export async function exportRecordingTrace(
       output: target,
       eventCount,
       droppedTrailingBytes,
+      adjustedWallClockEvents,
       recordingStatus: manifest.status,
     };
   } catch (error) {

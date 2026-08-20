@@ -42,6 +42,47 @@ function safeSerial(serial: string): string {
   return serial.replaceAll(/[^a-zA-Z0-9_.-]/gu, "_");
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isRecordingManifest(value: unknown): value is RecordingManifest {
+  if (!isRecord(value)) return false;
+  const status = value.status;
+  return (
+    value.schemaVersion === SCHEMA_VERSION &&
+    Number.isSafeInteger(value.pid) &&
+    Number(value.pid) > 0 &&
+    typeof value.serial === "string" &&
+    value.serial.length > 0 &&
+    typeof value.startedAt === "string" &&
+    Number.isFinite(Date.parse(value.startedAt)) &&
+    (value.endedAt === null ||
+      (typeof value.endedAt === "string" && Number.isFinite(Date.parse(value.endedAt)))) &&
+    (status === "active" ||
+      status === "completed" ||
+      status === "size-limit" ||
+      status === "time-limit" ||
+      status === "crashed") &&
+    isNonNegativeSafeInteger(value.bytesWritten) &&
+    Number.isSafeInteger(value.maxBytes) &&
+    Number(value.maxBytes) >= 1024 * 1024 &&
+    Number.isSafeInteger(value.maxDurationMs) &&
+    Number(value.maxDurationMs) >= 1_000 &&
+    isRecord(value.video) &&
+    value.video.path === "video.h264" &&
+    value.video.codec === "h264-annex-b" &&
+    isRecord(value.events) &&
+    value.events.path === "events.jsonl" &&
+    value.events.format === "jsonl" &&
+    value.events.containsLogs === false
+  );
+}
+
 function processIsAlive(pid: number): boolean {
   if (!Number.isSafeInteger(pid) || pid <= 0) return false;
   try {
@@ -50,6 +91,30 @@ function processIsAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+async function recoveredByteCount(
+  directory: string,
+  manifest: RecordingManifest,
+): Promise<number> {
+  const [video, events] = await Promise.all([
+    lstat(join(directory, manifest.video.path)),
+    lstat(join(directory, manifest.events.path)),
+  ]);
+  if (!video.isFile() || !events.isFile()) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "Recording streams must be regular files before crash recovery.",
+    );
+  }
+  const bytesWritten = video.size + events.size;
+  if (!Number.isSafeInteger(bytesWritten) || bytesWritten < 0 || bytesWritten > manifest.maxBytes) {
+    throw new ServeDroidError(
+      "INVALID_ARGUMENT",
+      "Recovered recording streams exceed the declared byte limit.",
+    );
+  }
+  return bytesWritten;
 }
 
 export async function recoverPartialRecordings(root: string): Promise<string[]> {
@@ -65,19 +130,23 @@ export async function recoverPartialRecordings(root: string): Promise<string[]> 
     const partial = join(directory, "manifest.partial.json");
     try {
       if (!(await lstat(directory)).isDirectory()) continue;
-      const manifest = JSON.parse(await readFile(partial, "utf8")) as RecordingManifest;
+      const value = JSON.parse(await readFile(partial, "utf8")) as unknown;
+      if (!isRecordingManifest(value)) continue;
+      const manifest = value;
       if (processIsAlive(manifest.pid)) continue;
+      const bytesWritten = await recoveredByteCount(directory, manifest);
       const crashed: RecordingManifest = {
         ...manifest,
         endedAt: new Date().toISOString(),
         status: "crashed",
+        bytesWritten,
       };
       const target = join(directory, "manifest.crashed.json");
       await writeFile(partial, `${JSON.stringify(crashed, null, 2)}\n`, { mode: 0o600 });
       await rename(partial, target);
       recovered.push(target);
     } catch {
-      // Ignore unrelated directories and malformed user-owned files.
+      // Ignore unrelated directories, malformed user-owned files, and unsafe recording streams.
     }
   }
   return recovered;
@@ -88,18 +157,15 @@ export async function removeRecording(directory: string): Promise<void> {
   let manifest: RecordingManifest | undefined;
   for (const name of ["manifest.json", "manifest.crashed.json", "manifest.partial.json"]) {
     try {
-      manifest = JSON.parse(await readFile(join(target, name), "utf8")) as RecordingManifest;
+      const value = JSON.parse(await readFile(join(target, name), "utf8")) as unknown;
+      if (!isRecordingManifest(value)) continue;
+      manifest = value;
       break;
     } catch {
       // Try the next recognized manifest name.
     }
   }
-  if (
-    !manifest ||
-    manifest.schemaVersion !== SCHEMA_VERSION ||
-    !manifest.video ||
-    !manifest.events
-  ) {
+  if (!manifest) {
     throw new ServeDroidError(
       "INVALID_ARGUMENT",
       "Refusing to remove a directory that is not a serve-droid recording.",

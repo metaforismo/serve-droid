@@ -16,6 +16,33 @@ async function root(): Promise<string> {
   return path;
 }
 
+async function writeRecording(
+  directory: string,
+  events: string,
+  overrides: Record<string, unknown> = {},
+): Promise<void> {
+  await mkdir(directory);
+  await writeFile(join(directory, "video.h264"), "");
+  await writeFile(join(directory, "events.jsonl"), events);
+  await writeFile(
+    join(directory, "manifest.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      pid: 1,
+      serial: "fixture",
+      startedAt: "2026-08-19T12:00:00.000Z",
+      endedAt: "2026-08-19T12:01:00.000Z",
+      status: "completed",
+      bytesWritten: Buffer.byteLength(events),
+      maxBytes: 1024 * 1024,
+      maxDurationMs: 60_000,
+      video: { path: "video.h264", codec: "h264-annex-b" },
+      events: { path: "events.jsonl", format: "jsonl", containsLogs: false },
+      ...overrides,
+    })}\n`,
+  );
+}
+
 describe("recording trace export", () => {
   it("streams finalized privacy-filtered events into Chrome Trace Event JSON", async () => {
     const parent = await root();
@@ -42,6 +69,7 @@ describe("recording trace export", () => {
     expect(result).toMatchObject({
       eventCount: 3,
       droppedTrailingBytes: 0,
+      adjustedWallClockEvents: 0,
       recordingStatus: "completed",
     });
 
@@ -59,7 +87,7 @@ describe("recording trace export", () => {
     expect(JSON.stringify(trace)).not.toContain("user-secret-text");
     expect(trace.at(-1)).toMatchObject({
       name: "trace-export",
-      args: { sourceEventCount: 3, droppedTrailingBytes: 0 },
+      args: { sourceEventCount: 3, droppedTrailingBytes: 0, adjustedWallClockEvents: 0 },
     });
   });
 
@@ -109,6 +137,66 @@ describe("recording trace export", () => {
     );
   });
 
+  it("keeps legacy wall-clock traces non-decreasing and reports timestamp correction", async () => {
+    const parent = await root();
+    const directory = join(parent, "session-legacy-clock-step");
+    const first = JSON.stringify({
+      schemaVersion: 1,
+      timestamp: "2026-08-19T12:00:00.020Z",
+      type: "app",
+      details: { operation: "launch" },
+    });
+    const second = JSON.stringify({
+      schemaVersion: 1,
+      timestamp: "2026-08-19T12:00:00.010Z",
+      type: "action",
+      details: { action: "tap" },
+    });
+    await writeRecording(directory, `${first}\n${second}\n`);
+
+    const output = join(parent, "legacy.trace.json");
+    const result = await exportRecordingTrace(directory, output);
+    expect(result.adjustedWallClockEvents).toBe(1);
+    const trace = JSON.parse(await readFile(output, "utf8")) as Array<Record<string, unknown>>;
+    const app = trace.find((event) => event.name === "app:launch");
+    const action = trace.find((event) => event.name === "action:tap");
+    expect(app?.ts).toBe(20_000);
+    expect(action).toMatchObject({
+      ts: 20_000,
+      args: expect.objectContaining({
+        timingSource: "wall-clock",
+        timingAdjusted: true,
+        sourceTimestampUs: 10_000,
+      }),
+    });
+  });
+
+  it("fails closed when modern monotonic event ordering regresses", async () => {
+    const parent = await root();
+    const directory = join(parent, "session-bad-monotonic");
+    const first = JSON.stringify({
+      schemaVersion: 1,
+      timestamp: "2026-08-19T12:00:00.010Z",
+      monotonicUs: 20_000,
+      sequence: 4,
+      type: "action",
+      details: { action: "tap" },
+    });
+    const second = JSON.stringify({
+      schemaVersion: 1,
+      timestamp: "2026-08-19T12:00:00.020Z",
+      monotonicUs: 10_000,
+      sequence: 5,
+      type: "action",
+      details: { action: "swipe" },
+    });
+    await writeRecording(directory, `${first}\n${second}\n`);
+
+    const output = join(parent, "bad-monotonic.trace.json");
+    await expect(exportRecordingTrace(directory, output)).rejects.toThrow(/monotonic timestamps/u);
+    await expect(stat(output)).rejects.toThrow();
+  });
+
   it("rejects active recordings without leaving a partial trace", async () => {
     const parent = await root();
     const recorder = await SessionRecorder.create({
@@ -125,28 +213,20 @@ describe("recording trace export", () => {
     await recorder.stop();
   });
 
+  it("fails closed on malformed finalized manifest fields", async () => {
+    const parent = await root();
+    const directory = join(parent, "session-bad-manifest");
+    await writeRecording(directory, "", { startedAt: 1 });
+    const output = join(parent, "bad-manifest.trace.json");
+    await expect(exportRecordingTrace(directory, output)).rejects.toThrow(/recording contract/u);
+    await expect(stat(output)).rejects.toThrow();
+  });
+
   it("fails closed on oversized event lines and removes the output file", async () => {
     const parent = await root();
     const directory = join(parent, "session-oversized");
-    await mkdir(directory);
-    await writeFile(join(directory, "video.h264"), "");
-    await writeFile(join(directory, "events.jsonl"), `${"x".repeat(64 * 1024 + 1)}\n`);
-    await writeFile(
-      join(directory, "manifest.json"),
-      `${JSON.stringify({
-        schemaVersion: 1,
-        pid: 1,
-        serial: "oversized",
-        startedAt: "2026-08-19T12:00:00.000Z",
-        endedAt: "2026-08-19T12:00:01.000Z",
-        status: "completed",
-        bytesWritten: 64 * 1024 + 1,
-        maxBytes: 1024 * 1024,
-        maxDurationMs: 60_000,
-        video: { path: "video.h264", codec: "h264-annex-b" },
-        events: { path: "events.jsonl", format: "jsonl", containsLogs: false },
-      })}\n`,
-    );
+    const events = `${"x".repeat(64 * 1024 + 1)}\n`;
+    await writeRecording(directory, events);
     const output = join(parent, "oversized.trace.json");
     await expect(exportRecordingTrace(directory, output)).rejects.toThrow(/64 KiB/u);
     await expect(stat(output)).rejects.toThrow();

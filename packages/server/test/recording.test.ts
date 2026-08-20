@@ -51,19 +51,26 @@ describe("session recording", () => {
     await recorder.stop();
   });
 
-  it("recovers dead-process partial manifests and removes only recognized recordings", async () => {
+  it("recovers dead-process partial manifests with the actual persisted byte count", async () => {
     const parent = await root();
     const directory = join(parent, "session-crashed");
+    const video = Buffer.from([0, 0, 0, 1, 0x65, 1, 2, 3]);
+    const event = `${JSON.stringify({
+      schemaVersion: 1,
+      timestamp: "2026-08-19T12:00:00.010Z",
+      type: "video-restart",
+      details: { attempt: 1 },
+    })}\n`;
     await mkdir(directory);
-    await writeFile(join(directory, "video.h264"), "");
-    await writeFile(join(directory, "events.jsonl"), "");
+    await writeFile(join(directory, "video.h264"), video);
+    await writeFile(join(directory, "events.jsonl"), event);
     await writeFile(
       join(directory, "manifest.partial.json"),
       JSON.stringify({
         schemaVersion: 1,
         pid: 999_999_999,
         serial: "serial",
-        startedAt: new Date().toISOString(),
+        startedAt: "2026-08-19T12:00:00.000Z",
         endedAt: null,
         status: "active",
         bytesWritten: 0,
@@ -73,11 +80,44 @@ describe("session recording", () => {
         events: { path: "events.jsonl", format: "jsonl", containsLogs: false },
       }),
     );
-    await expect(recoverPartialRecordings(parent)).resolves.toEqual([
-      join(directory, "manifest.crashed.json"),
-    ]);
+
+    const crashedPath = join(directory, "manifest.crashed.json");
+    await expect(recoverPartialRecordings(parent)).resolves.toEqual([crashedPath]);
+    const crashed = JSON.parse(await readFile(crashedPath, "utf8")) as Record<string, unknown>;
+    expect(crashed).toMatchObject({
+      status: "crashed",
+      bytesWritten: video.length + Buffer.byteLength(event),
+    });
+
     await removeRecording(directory);
     await expect(stat(directory)).rejects.toThrow();
     await expect(removeRecording(parent)).rejects.toThrow(/not a serve-droid recording/u);
+  });
+
+  it("does not recover malformed partial manifests as trusted recordings", async () => {
+    const parent = await root();
+    const directory = join(parent, "session-malformed");
+    await mkdir(directory);
+    await writeFile(join(directory, "video.h264"), "video");
+    await writeFile(join(directory, "events.jsonl"), "{}\n");
+    await writeFile(
+      join(directory, "manifest.partial.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        pid: 999_999_999,
+        serial: "serial",
+        startedAt: 1,
+        endedAt: null,
+        status: "active",
+        bytesWritten: 0,
+        maxBytes: 1024 * 1024,
+        maxDurationMs: 60_000,
+        video: { path: "video.h264", codec: "h264-annex-b" },
+        events: { path: "events.jsonl", format: "jsonl", containsLogs: false },
+      }),
+    );
+
+    await expect(recoverPartialRecordings(parent)).resolves.toEqual([]);
+    await expect(stat(join(directory, "manifest.partial.json"))).resolves.toBeDefined();
   });
 });
