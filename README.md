@@ -12,12 +12,13 @@ npx serve-droid
 # → Browser cockpit at a local authenticated URL
 ```
 
-![serve-droid browser cockpit with an active Android device, direct controls, file install progress, clipboard paste, and searchable Logcat](docs/assets/serve-droid-cockpit.jpg)
+![serve-droid device-first browser cockpit with an active Android device, compact controls, floating agent inspector, file install progress, clipboard paste, and searchable Logcat](docs/assets/serve-droid-cockpit.jpg)
 
-_One shared session: active-device controls on the left, the live Android surface in the center,
-and agent context such as filtered Logcat or the semantic UI tree on the right. The deterministic
-demo also exercises authenticated file install and clipboard flows. It is not real-device
-validation; hardware evidence is tracked separately in the release checklist._
+_One shared session: compact active-device controls stay on the left while the live Android surface
+owns the primary workspace. On wide screens the agent inspector floats contextually on the right;
+on narrower windows it stacks below the device instead of shrinking the interaction surface. The
+deterministic demo also exercises authenticated file install and clipboard flows. It is not
+real-device validation; hardware evidence is tracked separately in the release checklist._
 
 ## What you get
 
@@ -193,6 +194,7 @@ hardware, platform, and publication gates.
 - [x] Publish the open repository with protected `main`, CodeQL, Dependabot, and secret scanning.
 - [x] Ship the shared CLI, HTTP/WebSocket, MCP, Agent Skill, and browser cockpit foundation.
 - [x] Add a reproducible, clearly labeled cockpit screenshot to this README.
+- [x] Refine the browser cockpit into a device-first responsive workspace with contextual inspector.
 - [x] Add searchable Logcat controls with priority filtering, pause, clear, and copy.
 - [x] Add secure LAN token handoff and bounded browser clipboard controls.
 - [x] Add coalesced mouse-wheel and trackpad scrolling over the Android surface.
