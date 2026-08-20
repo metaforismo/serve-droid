@@ -5,7 +5,48 @@ human or agent can understand what just happened without enabling a recording or
 Logcat.
 
 Activity is bounded to the latest 256 events. It is session-local, is not persisted, and is cleared
-when the server process ends.
+when the server process ends. The same retained stream is available in the browser inspector, the
+CLI, and the authenticated HTTP API; none of those surfaces maintains a separate event history.
+
+## CLI
+
+Read the current retained Activity page from the only live session:
+
+```bash
+serve-droid activity
+```
+
+Select a specific session by device serial or model when more than one session is running:
+
+```bash
+serve-droid activity emulator-5554
+serve-droid --device emulator-5554 activity
+```
+
+Resume after a previously observed cursor:
+
+```bash
+serve-droid activity --since 42
+```
+
+Use the global `--json` flag for stable machine-readable output:
+
+```bash
+serve-droid --json activity --since 42
+```
+
+The JSON result includes the server Activity page plus the selected session's serial and model. The
+CLI uses the persisted live-session token internally for the authenticated request, but never emits
+that token in normal or JSON output. Session selection rejects missing or ambiguous matches instead
+of guessing which live device to inspect.
+
+## Browser inspector
+
+Open **Activity** in the cockpit inspector to see the same privacy-filtered stream. The browser only
+polls while the Activity tab is selected and the inspector is visible, then resumes from its last
+cursor when reopened. If the client falls behind the bounded retention window, it replaces stale
+local history with the retained server window instead of presenting a discontinuous timeline as
+complete.
 
 ## HTTP API
 
