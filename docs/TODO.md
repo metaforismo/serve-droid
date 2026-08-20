@@ -57,6 +57,8 @@ because its code path compiles.
 - [ ] Sustain interactive 30 FPS during ordinary UI motion.
 - [x] Restart a failed scrcpy helper exactly once and expose the terminal structured error.
 - [ ] Exercise resolution changes, keyframes, rotation, and malformed packets on real transport.
+- [x] Prove two authenticated server clients share one video source, receive the same packet, and
+      issue independent bounded control actions while a third video client is rejected by the cap.
 - [ ] Prove two simultaneous browser clients can view and control one session.
 - [ ] Run and measure a bounded 60-minute session.
 
