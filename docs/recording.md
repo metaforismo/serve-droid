@@ -13,7 +13,9 @@ not upload recordings or delete them automatically.
 
 - `video.h264`: the original H.264 Annex-B stream from scrcpy. The host does not decode or
   re-encode it.
-- `events.jsonl`: bounded lifecycle and control-event summaries.
+- `events.jsonl`: bounded lifecycle and control-event summaries. New events include a monotonic
+  microsecond timestamp and sequence number in addition to wall-clock time. Trace export treats that
+  monotonic clock as authoritative for new recordings and validates that it never regresses.
 - `manifest.json`: schema version, device serial, limits, timestamps, byte count, and final status.
 
 Events intentionally exclude bearer tokens, Logcat, screenshots, clipboard data, typed text, deep
@@ -49,11 +51,39 @@ recognized serve-droid manifest and refuses a recording owned by a live process:
 serve-droid recording remove ./recordings/session-emulator-5554-... --yes
 ```
 
+## Trace export
+
+A finalized or recovered recording can be exported without decoding the H.264 video:
+
+```sh
+serve-droid recording trace ./recordings/session-emulator-5554-... -o session.trace.json
+```
+
+The output is streaming Chrome Trace Event JSON that can be opened in Perfetto. Lifecycle, input,
+device, capture, and transport events are placed on separate tracks. The exporter reuses only the
+privacy-filtered metadata already present in `events.jsonl`; it does not add Logcat, tokens, typed
+text, deep-link URLs, local/remote file paths, or file contents.
+
+New recordings use monotonic microsecond timestamps and strictly increasing event sequence metadata;
+a regression makes export fail closed. Older recordings that predate monotonic metadata fall back to
+relative wall-clock timestamps. If the host clock moved backwards, trace export preserves JSONL event
+order by clamping only the affected legacy event to the previous trace timestamp and marks the event
+with `timingAdjusted` plus its original `sourceTimestampUs` value. This avoids drawing a misleading
+backwards timeline without pretending the legacy source clock was monotonic.
+
+Trace export refuses active/unrecovered recordings, unsafe stream-file types, malformed manifests,
+and existing output files. It caps each source event line at 64 KiB, streams the input instead of
+loading the entire recording into memory, and deletes a partially written trace if validation fails.
+A recovered crash may end with an incomplete final JSONL fragment; only that final unterminated
+fragment is dropped and its byte count is reported.
+
 ## Crash recovery
 
 While active, a recording has `manifest.partial.json`. Starting another recording in the same root
-automatically marks partial manifests owned by dead processes as `manifest.crashed.json`; it never
-touches a live recorder. Recovery can also be requested explicitly:
+automatically marks valid partial manifests owned by dead processes as `manifest.crashed.json`; it
+never touches a live recorder. Recovery verifies that both recording streams are regular files and
+reconstructs `bytesWritten` from the bytes actually persisted before the crash rather than trusting
+the stale partial-manifest counter. Recovery can also be requested explicitly:
 
 ```sh
 serve-droid recording recover ./recordings

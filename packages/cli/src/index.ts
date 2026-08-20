@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { Command } from "commander";
 import {
   AdbClient,
@@ -23,6 +23,7 @@ import {
   GridDashboard,
   readSessionStates,
   recoverPartialRecordings,
+  exportRecordingTrace,
   removeRecording,
   removeSessionState,
   ServeDroidServer,
@@ -570,6 +571,18 @@ recording
       options,
       `Recovered ${recovered.length} partial recording(s).`,
     );
+  });
+
+recording
+  .command("trace <session-directory>")
+  .description("Export one finalized recording as Chrome Trace Event JSON for Perfetto.")
+  .option("-o, --output <path>", "trace JSON output path")
+  .action(async (directory, local, command) => {
+    const options = globalOptions(command);
+    const source = resolve(directory);
+    const target = resolve(local.output ?? `${basename(source)}.trace.json`);
+    const result = await exportRecordingTrace(source, target);
+    output(result, options, `Exported ${result.eventCount} recording events to ${result.output}.`);
   });
 
 recording

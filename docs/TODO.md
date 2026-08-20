@@ -157,7 +157,7 @@ because its code path compiles.
 - [x] Enforce recording byte/time limits with explicit verified cleanup.
 - [x] Recover partial manifests only when their owning process is dead.
 - [x] Add host-authorized browser recording start/stop controls without exposing host path selection.
-- [ ] Rich trace export.
+- [x] Export finalized/recovered recording events as bounded Perfetto-compatible trace JSON.
 - [x] Expiring foreground named tunnels with explicit consent, revocation, and visible state.
 - [ ] Multi-user collaboration roles.
 - [x] Discover installed AVDs independently and provide explicit start/stop lifecycle controls.
