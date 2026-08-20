@@ -37,8 +37,9 @@ import {
 import { createH264CanvasPlayer, type CanvasPlayer } from "./video.js";
 import { handleDecodedFrameRequest } from "./decoded-frame.js";
 import { nextAudioReconnectDelay, OpusAudioPlayer } from "./audio.js";
+import { ActivityPanel } from "./ActivityPanel.js";
 
-type Panel = "logs" | "tree";
+type Panel = "logs" | "tree" | "activity";
 type LogPriority = "all" | "V" | "D" | "I" | "W" | "E" | "F";
 interface PointerGesture {
   pointerId: number;
@@ -125,6 +126,7 @@ function Cockpit() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selected, setSelected] = useState<UiElement | null>(null);
   const [panel, setPanel] = useState<Panel>("logs");
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [logQuery, setLogQuery] = useState("");
   const [logPriority, setLogPriority] = useState<LogPriority>("all");
   const [logsPaused, setLogsPaused] = useState(false);
@@ -554,7 +556,7 @@ function Cockpit() {
 
   return (
     <main
-      className="shell"
+      className={`shell ${inspectorOpen ? "" : "inspector-closed"}`}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => void onDrop(event)}
     >
@@ -591,6 +593,15 @@ function Cockpit() {
               Recording
             </span>
           )}
+          <button
+            type="button"
+            className="inspector-toggle"
+            aria-label="Toggle inspector"
+            aria-pressed={inspectorOpen}
+            onClick={() => setInspectorOpen((value) => !value)}
+          >
+            Inspector
+          </button>
           <span>
             {observation?.device.model ?? observation?.device.serial ?? "Waiting for device"}
           </span>
@@ -881,7 +892,13 @@ function Cockpit() {
               <span>Inspector</span>
               <strong>Agent context</strong>
             </div>
-            <small>{panel === "logs" ? "Live Logcat" : "Semantic UI"}</small>
+            <small>
+              {panel === "logs"
+                ? "Live Logcat"
+                : panel === "tree"
+                  ? "Semantic UI"
+                  : "Session Activity"}
+            </small>
           </div>
           <div className="tabs" role="tablist">
             <button
@@ -899,6 +916,14 @@ function Cockpit() {
               onClick={() => setPanel("tree")}
             >
               UI tree <em>{observation?.elements.length ?? 0}</em>
+            </button>
+            <button
+              role="tab"
+              aria-selected={panel === "activity"}
+              className={panel === "activity" ? "active" : ""}
+              onClick={() => setPanel("activity")}
+            >
+              Activity
             </button>
           </div>
           {panel === "logs" ? (
@@ -974,7 +999,7 @@ function Cockpit() {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : panel === "tree" ? (
             <div className="tree">
               <input
                 aria-label="Filter UI elements"
@@ -1000,6 +1025,8 @@ function Cockpit() {
                 ))}
               </div>
             </div>
+          ) : (
+            <ActivityPanel active={inspectorOpen} />
           )}
         </aside>
       </section>
