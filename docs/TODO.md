@@ -86,7 +86,7 @@ because its code path compiles.
 
 - [x] Responsive portrait/landscape canvas with pointer input.
 - [x] Connection, device, resolution, foreground app, and frame indicators.
-- [x] Back, Home, Recents, Power, rotation, and screenshot controls.
+- [x] Back, Home, Recents, Power, system volume, rotation, and screenshot controls.
 - [x] Searchable semantic tree with normalized hover overlays and click targeting.
 - [x] Bounded searchable Logcat panel.
 - [x] APK/file drag-and-drop with safe server-side limits.

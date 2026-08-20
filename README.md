@@ -31,6 +31,7 @@ hardware evidence is tracked separately in the release checklist._
   preview, download, and supported-browser clipboard actions.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
+- Explicit Android system volume down/up controls in the device rail, separate from browser playback mute.
 - Privacy-filtered in-memory Activity timeline for recent structured session, device, and control events.
 - Secure LAN token entry and bounded clipboard paste into the focused Android field.
 - Drag and drop APK or file transfer with byte progress and an explicit Android processing phase.
