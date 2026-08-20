@@ -1,0 +1,62 @@
+:root {
+  --sd-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.error,
+.drop-status,
+.clipboard-card {
+  transition:
+    opacity 180ms var(--sd-ease-out),
+    transform 180ms var(--sd-ease-out);
+}
+
+.touch-indicator {
+  transition: transform 120ms var(--sd-ease-out);
+}
+
+.log-tools button,
+footer button {
+  transition:
+    transform 140ms var(--sd-ease-out),
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.log-tools button:active,
+footer button:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  footer button:hover,
+  footer button:focus-visible {
+    border-radius: 7px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.045);
+  }
+}
+
+@starting-style {
+  .error {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.98);
+  }
+
+  .drop-status {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+
+  .clipboard-card {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error,
+  .drop-status,
+  .clipboard-card {
+    transition-property: opacity;
+  }
+}
