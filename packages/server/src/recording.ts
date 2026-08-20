@@ -1,14 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  open,
-  readFile,
-  readdir,
-  rename,
-  lstat,
-  writeFile,
-  mkdir,
-  rm,
-} from "node:fs/promises";
+import { open, readFile, readdir, rename, lstat, writeFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import type { FileHandle } from "node:fs/promises";
 import { SCHEMA_VERSION, ServeDroidError } from "@serve-droid/core";
@@ -102,10 +93,7 @@ function processIsAlive(pid: number): boolean {
   }
 }
 
-async function recoveredByteCount(
-  directory: string,
-  manifest: RecordingManifest,
-): Promise<number> {
+async function recoveredByteCount(directory: string, manifest: RecordingManifest): Promise<number> {
   const [video, events] = await Promise.all([
     lstat(join(directory, manifest.video.path)),
     lstat(join(directory, manifest.events.path)),
