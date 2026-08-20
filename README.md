@@ -69,7 +69,12 @@ npx serve-droid doctor --browser
 npx serve-droid avd list
 npx serve-droid start --detach
 npx serve-droid list --json
+npx serve-droid activity --since 0 --json
 ```
+
+`serve-droid activity` reads the same bounded, privacy-filtered session timeline shown by the browser
+inspector. It selects one live session, authenticates with that session internally, and supports
+cursor resume without exposing the bearer token. See the [Activity guide](docs/activity.md).
 
 When selecting a fixed port, probe it before touching the device. Occupied ports return the stable
 `PORT_IN_USE` code and exit status `31`; `--port 0` keeps safe ephemeral allocation.
@@ -198,6 +203,7 @@ hardware, platform, and publication gates.
 - [x] Add a reproducible, clearly labeled cockpit screenshot to this README.
 - [x] Refine the browser cockpit into a device-first responsive workspace with contextual inspector.
 - [x] Add searchable Logcat controls with priority filtering, pause, clear, and copy.
+- [x] Add bounded privacy-safe Activity across browser, CLI, and authenticated HTTP.
 - [x] Add secure LAN token handoff and bounded browser clipboard controls.
 - [x] Add coalesced mouse-wheel and trackpad scrolling over the Android surface.
 - [x] Route browser pointer and gesture input through the active scrcpy control channel.
