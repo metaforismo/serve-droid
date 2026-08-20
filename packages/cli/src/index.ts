@@ -29,10 +29,12 @@ import {
   ServeDroidServer,
   assertPortAvailable,
   resolveCloudflaredPath,
+  type SessionActivityPage,
 } from "@serve-droid/server";
 import { runMcpServer } from "@serve-droid/mcp";
 import { probeBrowser } from "./browser-probe.js";
 import { cliProgressEvent, writeCliProgress } from "./progress.js";
+import { fetchSessionJson, selectLiveSession, validateSessionCursor } from "./session-client.js";
 
 interface GlobalOptions {
   device?: string;
@@ -410,21 +412,7 @@ tunnel
         "Remote access publishes the selected session; rerun with --yes after reviewing docs/tunnels.md.",
       );
     }
-    const matches = (await readSessionStates()).filter(
-      (session) =>
-        !device ||
-        session.device.serial === device ||
-        session.device.model?.toLowerCase() === String(device).toLowerCase(),
-    );
-    if (matches.length !== 1) {
-      throw new ServeDroidError(
-        matches.length ? "DEVICE_AMBIGUOUS" : "SESSION_NOT_FOUND",
-        matches.length
-          ? "Tunnel device selection is ambiguous."
-          : "No matching live session exists.",
-      );
-    }
-    const session = matches[0]!;
+    const session = selectLiveSession(await readSessionStates(), device ?? options.device);
     const manager = new NamedCloudflareTunnel({
       executable: await resolveCloudflaredPath(local.cloudflared),
       tunnel: local.tunnel,
@@ -534,6 +522,34 @@ program
         .map((session) => `${session.device.serial}\t${session.url}\tpid ${session.pid}`)
         .join("\n") || "No live sessions.",
     );
+  });
+
+program
+  .command("activity [device]")
+  .description("Read recent privacy-filtered structured events from one live session.")
+  .option("--since <cursor>", "resume after a numeric Activity cursor", "0")
+  .action(async (device, local, command) => {
+    const options = globalOptions(command);
+    const session = selectLiveSession(await readSessionStates(), device ?? options.device);
+    const since = validateSessionCursor(String(local.since));
+    const page = await fetchSessionJson<SessionActivityPage>(
+      session,
+      `/api/v1/activity?since=${encodeURIComponent(since)}`,
+    );
+    const result = {
+      ...page,
+      session: { serial: session.device.serial, model: session.device.model ?? null },
+    };
+    const human =
+      page.events
+        .map((event) => {
+          const details = Object.keys(event.details).length
+            ? `\t${JSON.stringify(event.details)}`
+            : "";
+          return `${event.cursor}\t${event.timestamp}\t${event.type}${details}`;
+        })
+        .join("\n") || "No retained session activity.";
+    output(result, options, human);
   });
 
 program
