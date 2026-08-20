@@ -44,9 +44,7 @@ async function routeDemo(page: Page): Promise<void> {
       body: JSON.stringify({ schemaVersion: 1, controllable: false, recording: null }),
     }),
   );
-  await page.route("**/api/v1/screenshot", (route) =>
-    route.fulfill({ status: 204, body: "" }),
-  );
+  await page.route("**/api/v1/screenshot", (route) => route.fulfill({ status: 204, body: "" }));
 }
 
 test("keeps the floating inspector clear of the Android surface at compact desktop widths", async ({
