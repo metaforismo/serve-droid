@@ -12,6 +12,7 @@ import {
   Power,
   ShieldCheck,
   SpeakerHigh,
+  SpeakerLow,
   SpeakerSlash,
   Stack,
   UploadSimple,
@@ -686,6 +687,26 @@ function Cockpit() {
               >
                 <DeviceMobile aria-hidden="true" />
                 <span>Portrait</span>
+              </button>
+              <button
+                title="Volume down"
+                aria-label="Volume down"
+                onClick={() =>
+                  void runDeviceAction({ type: "key", key: "volume-down" }, "Volume down sent")
+                }
+              >
+                <SpeakerLow aria-hidden="true" />
+                <span>Vol −</span>
+              </button>
+              <button
+                title="Volume up"
+                aria-label="Volume up"
+                onClick={() =>
+                  void runDeviceAction({ type: "key", key: "volume-up" }, "Volume up sent")
+                }
+              >
+                <SpeakerHigh aria-hidden="true" />
+                <span>Vol +</span>
               </button>
               <button
                 title={audioPlaying ? "Mute audio" : "Unmute audio"}
