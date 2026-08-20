@@ -325,7 +325,7 @@ export async function exportRecordingTrace(
 
     const startedAtMs = Date.parse(manifest.startedAt);
     const stream = createReadStream(eventsPath, { highWaterMark: 16 * 1024 });
-    let buffered = Buffer.alloc(0);
+    let buffered: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let eventCount = 0;
     let lastTimestampUs = 0;
     let lastMonotonicSequence: number | undefined;
