@@ -97,6 +97,7 @@ because its code path compiles.
 - [x] Keep bearer tokens out of query strings, server logs, and non-loopback HTML.
 - [x] Add a LAN token-entry screen and document fragment-based handoff.
 - [x] Add priority and combined tag/message Logcat filters plus pause/clear/copy controls.
+- [x] Add bounded privacy-filtered session Activity with resumable cursors and a browser inspector tab.
 - [x] Add clipboard UI with manual entry and browser Clipboard API loading.
 - [x] Add byte-accurate browser upload progress with a separate Android install/push phase.
 - [x] Add a responsive active-device sidebar and structured inspector workspace.

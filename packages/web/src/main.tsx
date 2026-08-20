@@ -7,6 +7,7 @@ import { ScreenshotCapture } from "./ScreenshotCapture.js";
 import "./styles.css";
 import "./cockpit-v2.css";
 import "./cockpit-motion.css";
+import "./activity-panel.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

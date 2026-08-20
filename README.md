@@ -12,13 +12,14 @@ npx serve-droid
 # → Browser cockpit at a local authenticated URL
 ```
 
-![serve-droid device-first browser cockpit with an active Android device, compact controls, floating agent inspector, file install progress, clipboard paste, and searchable Logcat](docs/assets/serve-droid-cockpit.jpg)
+![serve-droid device-first browser cockpit with an active Android device, compact controls, floating Activity and Logcat inspector, file install progress, and clipboard paste](docs/assets/serve-droid-cockpit.jpg)
 
 _One shared session: compact active-device controls stay on the left while the live Android surface
-owns the primary workspace. On wide screens the agent inspector floats contextually on the right;
-on narrower windows it stacks below the device instead of shrinking the interaction surface. The
-deterministic demo also exercises authenticated file install and clipboard flows. It is not
-real-device validation; hardware evidence is tracked separately in the release checklist._
+owns the primary workspace. On wide screens the agent inspector floats contextually on the right
+and switches between filtered Logcat, semantic UI, and privacy-safe Activity; on narrower windows
+it stacks below the device instead of shrinking the interaction surface. The deterministic demo
+also exercises authenticated file install and clipboard flows. It is not real-device validation;
+hardware evidence is tracked separately in the release checklist._
 
 ## What you get
 
@@ -30,6 +31,7 @@ real-device validation; hardware evidence is tracked separately in the release c
   preview, download, and supported-browser clipboard actions.
 - Exact semantic element targeting that stops on missing or ambiguous matches.
 - Searchable, priority-filtered Logcat with pause, clear, and copy controls.
+- Privacy-filtered in-memory Activity timeline for recent structured session, device, and control events.
 - Secure LAN token entry and bounded clipboard paste into the focused Android field.
 - Drag and drop APK or file transfer with byte progress and an explicit Android processing phase.
 - One bounded observation containing the screen, UI hierarchy, foreground app, device state, and
