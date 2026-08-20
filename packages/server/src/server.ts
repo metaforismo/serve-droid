@@ -52,6 +52,7 @@ import {
   writeFileProgressFrame,
   type FileOperation,
 } from "./file-progress.js";
+import { SessionActivityBuffer, type SessionActivityType } from "./activity.js";
 
 const JSON_LIMIT = 1024 * 1024;
 const FILE_LIMIT = 256 * 1024 * 1024;
@@ -186,6 +187,7 @@ export class ServeDroidServer {
   readonly #controlWebSocket: WebSocketServer;
   readonly #video: VideoSource;
   readonly #decodedFrames = new DecodedFrameBroker();
+  readonly #activity = new SessionActivityBuffer();
   readonly #token: string;
   readonly #host: string;
   readonly #requestedPort: number;
@@ -264,15 +266,15 @@ export class ServeDroidServer {
       }
     });
     this.#video.on("error", (error) => {
-      this.#recorder?.recordEvent("video-error", { kind: error.name || "transport" });
+      this.#recordEvent("video-error", { kind: error.name || "transport" });
       for (const client of this.#videoWebSocket.clients) {
         if (client.readyState === WebSocket.OPEN) client.close(1011, error.message.slice(0, 120));
       }
     });
     this.#video.on("restart", ({ attempt, maxAttempts }) => {
-      this.#recorder?.recordEvent("video-restart", { attempt, maxAttempts });
+      this.#recordEvent("video-restart", { attempt, maxAttempts });
     });
-    this.#video.on("size", (size) => this.#recorder?.recordEvent("display-size", size));
+    this.#video.on("size", (size) => this.#recordEvent("display-size", size));
     this.#video.on("audioState", (state) => {
       this.#audioState = state;
       const message = JSON.stringify({
@@ -339,6 +341,11 @@ export class ServeDroidServer {
     return Boolean(this.#recordingOptions);
   }
 
+  #recordEvent(type: SessionActivityType, details: Record<string, unknown> = {}): void {
+    const event = this.#activity.append(type, details);
+    this.#recorder?.recordEvent(event.type, event.details);
+  }
+
   async #setBrowserRecording(body: Record<string, unknown>): Promise<{
     schemaVersion: 1;
     controllable: true;
@@ -373,7 +380,7 @@ export class ServeDroidServer {
           serial: this.service.device.serial,
         });
         this.#recorder = recorder;
-        recorder.recordEvent("recording-start", {
+        this.#recordEvent("recording-start", {
           trigger: "browser",
           serial: this.service.device.serial,
           width: this.#session!.display.width,
@@ -386,7 +393,7 @@ export class ServeDroidServer {
 
       if (!this.#recorder) return null;
       if (this.#recorder.status.active) {
-        this.#recorder.recordEvent("recording-stop", { trigger: "browser" });
+        this.#recordEvent("recording-stop", { trigger: "browser" });
       }
       await this.#recorder.stop();
       return this.#recorder.status;
@@ -419,7 +426,7 @@ export class ServeDroidServer {
 
     const stream = await this.#decodedFrames.capture({ maxWidth: width, quality });
     if (stream) {
-      this.#recorder?.recordEvent("screenshot", {
+      this.#recordEvent("screenshot", {
         source: "stream",
         width: stream.width,
         height: stream.height,
@@ -437,7 +444,7 @@ export class ServeDroidServer {
       height: dimensions?.height ?? null,
       capturedAt: new Date().toISOString(),
     };
-    this.#recorder?.recordEvent("screenshot", {
+    this.#recordEvent("screenshot", {
       source: capture.source,
       width: capture.width,
       height: capture.height,
@@ -469,14 +476,14 @@ export class ServeDroidServer {
           serial: this.service.device.serial,
         });
         this.#session.recordingDirectory = this.#recorder.status.directory;
-        this.#recorder.recordEvent("session-start", {
-          serial: this.service.device.serial,
-          width: display.width,
-          height: display.height,
-        });
       }
       this.service.startLogs();
       await this.#video.start();
+      this.#recordEvent("session-start", {
+        serial: this.service.device.serial,
+        width: display.width,
+        height: display.height,
+      });
       await writeSessionState(this.#session);
       return this.#session;
     } catch (error) {
@@ -496,7 +503,7 @@ export class ServeDroidServer {
     await this.#recordingMutation;
     this.#decodedFrames.close();
     await this.#video.stop();
-    this.#recorder?.recordEvent("session-stop");
+    this.#recordEvent("session-stop");
     await this.#recorder?.stop();
     this.service.stop();
     for (const client of [
@@ -587,6 +594,8 @@ export class ServeDroidServer {
             url: "/api/v1/screenshot",
           },
         });
+      } else if (url.pathname === "/api/v1/activity" && request.method === "GET") {
+        json(response, 200, this.#activity.read(url.searchParams.get("since") ?? "0"));
       } else if (url.pathname === "/api/v1/recording" && request.method === "GET") {
         json(response, 200, {
           schemaVersion: SCHEMA_VERSION,
@@ -806,7 +815,7 @@ export class ServeDroidServer {
     else if (type === "key") details.key = stringValue(body.key);
     else if (type === "rotate") details.orientation = stringValue(body.orientation);
     if (pointerTransport) details.transport = pointerTransport;
-    this.#recorder?.recordEvent("action", { action: type, ...details });
+    this.#recordEvent("action", { action: type, ...details });
     return { schemaVersion: SCHEMA_VERSION, ok: true };
   }
 
@@ -822,7 +831,7 @@ export class ServeDroidServer {
     else if (operation === "deep-link")
       await this.service.actions.deepLink(stringValue(body.url), packageName || undefined);
     else throw new ServeDroidError("INVALID_ARGUMENT", `Unsupported app operation '${operation}'.`);
-    this.#recorder?.recordEvent("app", {
+    this.#recordEvent("app", {
       operation,
       packageName: packageName || null,
       activity: operation === "launch" ? stringValue(body.activity) || null : null,
@@ -836,7 +845,7 @@ export class ServeDroidServer {
       stringValue(body.permission),
       stringValue(body.packageName),
     );
-    this.#recorder?.recordEvent("permission", {
+    this.#recordEvent("permission", {
       operation: stringValue(body.operation),
       permission: stringValue(body.permission),
       packageName: stringValue(body.packageName),
@@ -856,11 +865,11 @@ export class ServeDroidServer {
       const execute = async (): Promise<unknown> => {
         if (operation === "install") {
           await this.service.actions.install(path);
-          this.#recorder?.recordEvent("file", { operation: "install-apk" });
+          this.#recordEvent("file", { operation: "install-apk" });
           return { schemaVersion: SCHEMA_VERSION, ok: true, operation };
         }
         const destination = await this.service.actions.push(path);
-        this.#recorder?.recordEvent("file", { operation: "push" });
+        this.#recordEvent("file", { operation: "push" });
         return { schemaVersion: SCHEMA_VERSION, ok: true, operation, destination };
       };
 
