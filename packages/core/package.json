@@ -15,7 +15,7 @@
     "test:device": "vitest run test/device.test.ts --passWithNoTests"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.3.3",
+    "fast-xml-parser": "^5.11.0",
     "sharp": "^0.35.3"
   }
 }
