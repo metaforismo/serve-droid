@@ -16,6 +16,6 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@serve-droid/core": "workspace:*",
     "@serve-droid/server": "workspace:*",
-    "zod": "^4.3.5"
+    "zod": "^4.6.6"
   }
 }
